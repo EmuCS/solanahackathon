@@ -29,7 +29,7 @@
 | **Code** | https://github.com/EmuCS/solanahackathon |
 | **On-chain proof** | Real transactions from today's build, listed [below](#on-chain-proof) |
 
-### Try it (for judges)
+### Try it
 
 - **Claimant app** (open on a phone): https://faces-pioneer-fate-day.trycloudflare.com/capture.html
 - **Insurer portal** (open on a laptop): https://faces-pioneer-fate-day.trycloudflare.com/adjuster.html
