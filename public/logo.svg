@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="FraudBusters">
+  <!-- Browser-tab icon: faceted shield with a strike cut through it -->
+  <rect width="64" height="64" rx="12" fill="#0b0d12"/>
+  <defs>
+    <mask id="cut">
+      <rect width="64" height="64" fill="#fff"/>
+      <path d="M33.5 9 L38.5 9 L14.5 40 L9.5 40 Z" fill="#000"/>
+    </mask>
+  </defs>
+  <g mask="url(#cut)" transform="translate(8 8)">
+    <path d="M24 2.5 L5 8.5 V21.5 C5 33.5 13 42 24 45.5 Z" fill="#3a6df0"/>
+    <path d="M24 2.5 L43 8.5 V21.5 C43 33.5 35 42 24 45.5 Z" fill="#1f45c7"/>
+  </g>
+</svg>

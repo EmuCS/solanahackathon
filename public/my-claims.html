@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>My claims · FraudBusters</title>
+  <link rel="stylesheet" href="/app.css" />
+  <script src="/vendor/nacl-fast.min.js"></script>
+</head>
+<body>
+  <main>
+    <p class="eyebrow">Claimant app</p>
+    <h1>My claims</h1>
+    <div class="card subtle" style="margin-top:20px">
+      <p class="muted small" style="margin:0">Payments received on this device</p>
+      <div style="font-size:32px;font-weight:700;letter-spacing:-.02em" class="num" id="balance">—</div>
+    </div>
+    <div class="table-wrap" style="margin-top:16px">
+      <table>
+        <thead><tr><th>Status</th><th>Claim</th><th>Amount</th><th>Submitted</th><th></th></tr></thead>
+        <tbody id="rows"><tr><td colspan="5" class="muted">Loading…</td></tr></tbody>
+      </table>
+    </div>
+  </main>
+
+  <script type="module">
+    import { nav, deviceAddress, esc, eur, fmtTime, claimantBadge } from '/device.js';
+    nav('/my-claims.html', 'claimant');
+    const $ = (id) => document.getElementById(id);
+    const me = deviceAddress();
+
+    async function load() {
+      const [list, b] = await Promise.all([
+        fetch(`/api/my-claims/${me}`).then((r) => r.json()),
+        fetch(`/api/balance/${me}`).then((r) => r.json()),
+      ]);
+      $('balance').textContent = `${b.amount.toLocaleString('en-IE', { minimumFractionDigits: 2 })} ${b.symbol}`;
+      $('rows').innerHTML = list.length
+        ? list
+            .map(
+              (c) => `<tr>
+                <td>${claimantBadge(c.status)}</td>
+                <td><b>${esc(c.description || 'Claim')}</b><div class="muted small">${esc(c.insurerName)} · <span class="mono">${esc(c.id)}</span></div></td>
+                <td class="num">${eur(c.amount)}</td>
+                <td class="muted small">${fmtTime(c.createdAt)}</td>
+                <td class="small">${c.paymentExplorer ? `<a href="${c.paymentExplorer}" target="_blank" rel="noopener">Payment record</a>` : ''}</td></tr>`,
+            )
+            .join('')
+        : `<tr><td colspan="5" class="muted">No claims yet. <a href="/capture.html">Capture evidence</a> to start one.</td></tr>`;
+    }
+    load();
+    setInterval(load, 3000);
+  </script>
+</body>
+</html>

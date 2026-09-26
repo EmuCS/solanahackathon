@@ -1,0 +1,120 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Submit claim · FraudBusters</title>
+  <link rel="stylesheet" href="/app.css" />
+  <script src="/vendor/nacl-fast.min.js"></script>
+</head>
+<body>
+  <main>
+    <p class="eyebrow">Claimant app</p>
+    <h1>Submit a claim</h1>
+    <p class="lede">Attach evidence you captured in the app. Your insurer reviews every claim; once approved, the payment reaches this device within seconds.</p>
+
+    <div class="two" style="margin-top:24px">
+      <form class="card" id="form">
+        <label for="insurer" style="margin-top:0">Insurer</label>
+        <select id="insurer"></select>
+        <label for="amount">Amount claimed (EUR)</label>
+        <input id="amount" type="number" min="1" max="10000" step="0.01" value="450" required />
+        <label for="description">What happened?</label>
+        <input id="description" value="Dent on rear door, car park, Grand Canal Dock" />
+
+        <label>Evidence</label>
+        <div class="picker" id="picker"><span class="muted small">No captures on this device yet. <a href="/capture.html">Capture evidence</a></span></div>
+        <details>
+          <summary>Upload a photo taken elsewhere (slower review)</summary>
+          <input id="image" type="file" accept="image/*" style="margin-top:8px" />
+        </details>
+        <img id="preview" class="preview" hidden style="margin-top:14px" alt="Selected evidence" />
+        <button class="btn block" id="submit" style="margin-top:18px">Submit claim</button>
+      </form>
+
+      <div>
+        <div class="card subtle">
+          <p class="muted small" style="margin:0">Payments received on this device</p>
+          <div style="font-size:28px;font-weight:700;letter-spacing:-.02em" class="num" id="balance">—</div>
+          <p class="mono muted" id="addr" style="margin:4px 0 0"></p>
+        </div>
+        <div class="card" id="result" hidden style="margin-top:16px"></div>
+      </div>
+    </div>
+  </main>
+
+  <script type="module">
+    import { nav, deviceAddress, post, esc, eur, claimantBadge } from '/device.js';
+    nav('/claim.html', 'claimant');
+    const $ = (id) => document.getElementById(id);
+    const me = deviceAddress();
+    $('addr').textContent = me;
+
+    const cfg = await fetch('/api/config').then((r) => r.json());
+    $('insurer').innerHTML = Object.entries(cfg.insurers).map(([k, v]) => `<option value="${k}">${esc(v)}</option>`).join('');
+
+    async function refreshBalance() {
+      const b = await fetch(`/api/balance/${me}`).then((r) => r.json());
+      $('balance').textContent = `${b.amount.toLocaleString('en-IE', { minimumFractionDigits: 2 })} ${b.symbol}`;
+    }
+    refreshBalance();
+    setInterval(refreshBalance, 5000);
+
+    let selected = new URLSearchParams(location.search).get('photo');
+    function select(id, src) {
+      selected = id;
+      [...$('picker').querySelectorAll('button')].forEach((b) => b.classList.toggle('sel', b.dataset.id === id));
+      $('image').value = '';
+      $('preview').src = src;
+      $('preview').hidden = false;
+    }
+    const mine = await fetch(`/api/photos?device=${me}`).then((r) => r.json());
+    if (mine.length) {
+      $('picker').innerHTML = mine.map((p) => `<button type="button" data-id="${p.id}"><img src="${p.image}" alt="Capture ${p.id}" /></button>`).join('');
+      $('picker').querySelectorAll('button').forEach((b) => (b.onclick = () => select(b.dataset.id, b.querySelector('img').src)));
+      const pre = mine.find((p) => p.id === selected) || mine[0];
+      select(pre.id, pre.image);
+    }
+
+    $('image').onchange = (e) => {
+      const f = e.target.files[0];
+      if (!f) return;
+      selected = null;
+      $('picker').querySelectorAll('button').forEach((b) => b.classList.remove('sel'));
+      $('preview').src = URL.createObjectURL(f);
+      $('preview').hidden = false;
+    };
+
+    $('form').onsubmit = async (e) => {
+      e.preventDefault();
+      const fd = new FormData();
+      fd.append('insurer', $('insurer').value);
+      fd.append('amount', $('amount').value);
+      fd.append('description', $('description').value);
+      fd.append('pubkey', me);
+      if (selected) fd.append('photoId', selected);
+      else if ($('image').files[0]) fd.append('image', $('image').files[0]);
+      else return alert('Select a capture or upload a photo');
+
+      $('submit').disabled = true;
+      $('submit').textContent = 'Submitting…';
+      $('result').hidden = false;
+      $('result').innerHTML = '<p class="muted" style="margin:0">Sending your claim and evidence to your insurer…</p>';
+      try {
+        const { receipt: r } = await post('/api/claims', fd);
+        $('result').innerHTML = `
+          <div class="status review" style="margin-top:0">
+            <h3>Claim submitted</h3>
+            <p class="small">Reference <span class="mono">${esc(r.id)}</span> · ${esc(r.insurerName)} · ${eur(r.amount)}</p>
+          </div>
+          <p class="small" style="margin:12px 0 0">Status ${claimantBadge(r.status)}. You’ll see the decision in <a href="/my-claims.html">My claims</a>; approved payments arrive on this device.</p>`;
+      } catch (err) {
+        $('result').innerHTML = `<div class="status flagged" style="margin-top:0"><h3>Could not submit</h3><p class="small">${esc(err.message)}</p></div>`;
+      } finally {
+        $('submit').disabled = false;
+        $('submit').textContent = 'Submit claim';
+      }
+    };
+  </script>
+</body>
+</html>

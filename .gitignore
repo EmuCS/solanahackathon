@@ -1,0 +1,7 @@
+node_modules/
+.env
+# devnet keypairs + local TLS key — never commit
+keys/
+certs/
+# local index + uploaded images (source of truth is on-chain)
+data/

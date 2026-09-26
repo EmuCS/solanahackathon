@@ -1,0 +1,31 @@
+name: fraudbusters-verify
+subdomain: fraudbusters
+title: "FraudBusters Verify"
+description: "Check whether a photo was captured by a verified device and anchored on Solana, and whether it was already used in an insurance claim."
+category: security
+version: v1
+routing:
+  type: proxy
+  url: http://127.0.0.1:3000/
+operator:
+  currencies:
+    usd: ["USDC", "USDT", "CASH"]
+  network: "localnet"
+  fee_payer: true
+
+endpoints:
+  - method: GET
+    path: "v1/health"
+    description: "Health check."
+
+  - method: POST
+    path: "v1/verify"
+    resource: "verify"
+    description: "Verify a photo (multipart field: image). Returns capture record, Solana tx and prior claims."
+    metering:
+      dimensions:
+        - direction: usage
+          unit: requests
+          scale: 1
+          tiers:
+            - price_usd: 0.01

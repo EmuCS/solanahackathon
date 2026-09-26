@@ -1,0 +1,89 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>FraudBusters: verified claim evidence</title>
+  <link rel="stylesheet" href="/app.css" />
+  <script src="/vendor/nacl-fast.min.js"></script>
+</head>
+<body>
+  <main>
+    <p class="eyebrow">Claims evidence infrastructure</p>
+    <h1 class="hero">Know a claim photo is real before you pay it.</h1>
+    <p class="lede">Every claim photo is checked against the four questions an adjuster asks, in seconds, with the proof recorded on a shared ledger no single insurer controls.</p>
+
+    <div class="grid" style="margin-top:28px">
+      <a class="card action" href="/capture.html" style="text-decoration:none;color:inherit">
+        <p class="eyebrow" style="margin-bottom:6px">Claimant app</p>
+        <h3>Capture evidence and claim</h3>
+        <p class="muted small" style="margin:0">Live camera only. Track your claim; approved payments arrive on your phone in seconds.</p>
+      </a>
+      <a class="card action" href="/adjuster.html" style="text-decoration:none;color:inherit">
+        <p class="eyebrow" style="margin-bottom:6px">Insurer portal</p>
+        <h3>Review and settle claims</h3>
+        <p class="muted small" style="margin:0">Every claim arrives triaged, with the reason for every finding and the claimant’s history across insurers.</p>
+      </a>
+    </div>
+
+    <h2>Four questions, answered before anyone pays</h2>
+    <div class="grid how">
+      <div class="card">
+        <h3>Is it real?</h3>
+        <p class="muted small" style="margin:0">Captured live on the claimant’s phone, signed on the device and recorded on Solana. Unedited since.</p>
+      </div>
+      <div class="card">
+        <h3>Is it new?</h3>
+        <p class="muted small" style="margin:0">Never used in a claim before, at any insurer, even after compression. Plus the claimant’s history across the whole market.</p>
+      </div>
+      <div class="card">
+        <h3>Does it add up?</h3>
+        <p class="muted small" style="margin:0">AI reads the photo: does it show what is claimed, and is the amount plausible for the damage visible?</p>
+      </div>
+      <div class="card">
+        <h3>Settled?</h3>
+        <p class="muted small" style="margin:0">The adjuster approves; the payment settles in stablecoins within seconds, the decision recorded with it.</p>
+      </div>
+    </div>
+
+    <h2>Shared registry</h2>
+    <div class="stats" id="stats">
+      <div><b id="sCaptures">0</b><span>Captures anchored</span></div>
+      <div><b id="sClaims">0</b><span>Claims registered</span></div>
+      <div><b id="sFlagged">0</b><span>Flagged for fraud</span></div>
+      <div><b id="sPaid">€0.00</b><span>Settled</span></div>
+    </div>
+
+    <h2>Recent claims</h2>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Status</th><th>Amount</th><th>Insurer</th><th>Evidence</th><th>Filed</th></tr></thead>
+        <tbody id="claims"><tr><td colspan="5" class="muted">No claims yet.</td></tr></tbody>
+      </table>
+    </div>
+  </main>
+
+  <script type="module">
+    import { nav, esc, badge, eur, fmtTime, statusKey } from '/device.js';
+    nav('/');
+    async function load() {
+      const [f, all] = await Promise.all([fetch('/api/feed').then((r) => r.json()), fetch('/api/claims').then((r) => r.json())]);
+      document.getElementById('sCaptures').textContent = f.photos.length === 12 ? '12+' : f.photos.length;
+      document.getElementById('sClaims').textContent = all.length;
+      document.getElementById('sFlagged').textContent = all.filter((c) => statusKey(c.status) === 'flagged').length;
+      document.getElementById('sPaid').textContent = eur(all.filter((c) => c.status === 'paid').reduce((s, c) => s + (c.amount || 0), 0));
+      if (all.length)
+        document.getElementById('claims').innerHTML = all
+          .slice(0, 8)
+          .map(
+            (c) => `<tr class="click" onclick="location.href='/claim-view.html?id=${esc(c.id)}'">
+              <td>${badge(c.status)}</td><td class="num">${eur(c.amount)}</td><td>${esc(c.insurerName)}</td>
+              <td class="muted">${c.tier === 'verified' ? 'Captured in app' : 'Uploaded'}</td><td class="muted">${fmtTime(c.createdAt)}</td></tr>`,
+          )
+          .join('');
+    }
+    load();
+    setInterval(load, 5000);
+  </script>
+</body>
+</html>

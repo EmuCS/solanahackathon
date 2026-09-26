@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Adjuster queue · FraudBusters</title>
+  <link rel="stylesheet" href="/app.css" />
+  <script src="/vendor/nacl-fast.min.js"></script>
+</head>
+<body>
+  <main>
+    <p class="eyebrow">Step 3 · Insurer</p>
+    <h1>Adjuster queue</h1>
+    <p class="lede">Every claim arrives with its evidence checks and reasons. Nothing is paid until an adjuster approves it.</p>
+
+    <div class="row" style="margin:24px 0 14px">
+      <select id="insurer" style="width:auto"></select>
+      <select id="filter" style="width:auto">
+        <option value="open">Open claims</option>
+        <option value="all">All claims</option>
+      </select>
+    </div>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Status</th><th>Claim</th><th>Amount</th><th>Evidence</th><th>Key findings</th><th>Filed</th></tr></thead>
+        <tbody id="rows"><tr><td colspan="6" class="muted">Loading…</td></tr></tbody>
+      </table>
+    </div>
+  </main>
+
+  <script type="module">
+    import { nav, esc, badge, eur, fmtTime, statusKey } from '/device.js';
+    nav('/adjuster.html', 'insurer');
+    const $ = (id) => document.getElementById(id);
+    const cfg = await fetch('/api/config').then((r) => r.json());
+    $('insurer').innerHTML = `<option value="">All insurers</option>` + Object.entries(cfg.insurers).map(([k, v]) => `<option value="${k}">${esc(v)}</option>`).join('');
+    const ORDER = { flagged: 0, verified: 1, review: 2, paid: 3, rejected: 4 };
+
+    async function load() {
+      const all = await fetch(`/api/claims?insurer=${$('insurer').value}`).then((r) => r.json());
+      const rows = all
+        .filter((c) => $('filter').value === 'all' || !['paid', 'rejected'].includes(c.status))
+        .sort((a, b) => ORDER[statusKey(a.status)] - ORDER[statusKey(b.status)] || b.createdAt.localeCompare(a.createdAt));
+      $('rows').innerHTML = rows.length
+        ? rows
+            .map((c) => {
+              const bad = (c.checks || []).filter((x) => x.status === 'fail' || x.status === 'warn');
+              const findings = bad.length ? bad.map((x) => esc(x.label)).join(', ') : '<span class="muted">All checks passed</span>';
+              return `<tr class="click" onclick="location.href='/claim-view.html?id=${esc(c.id)}'">
+                <td>${badge(c.status)}</td>
+                <td><b>${esc(c.description || 'Claim')}</b><div class="muted small">${esc(c.insurerName)} · ${esc(c.id)}</div></td>
+                <td class="num">${eur(c.amount)}</td>
+                <td class="muted">${c.tier === 'verified' ? 'Captured in app' : 'Uploaded'}</td>
+                <td class="small">${findings}</td>
+                <td class="muted small">${fmtTime(c.createdAt)}</td></tr>`;
+            })
+            .join('')
+        : `<tr><td colspan="6" class="muted">No claims in this view.</td></tr>`;
+    }
+    $('insurer').onchange = load;
+    $('filter').onchange = load;
+    load();
+    setInterval(load, 5000);
+  </script>
+</body>
+</html>

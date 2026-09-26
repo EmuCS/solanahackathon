@@ -1,0 +1,140 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Capture evidence · FraudBusters</title>
+  <link rel="stylesheet" href="/app.css" />
+  <script src="/vendor/nacl-fast.min.js"></script>
+</head>
+<body>
+  <main>
+    <p class="eyebrow">Step 1 · Capture</p>
+    <h1>Capture claim evidence</h1>
+    <p class="lede">Photos can only be taken with the live camera, not uploaded from a gallery. Each photo is signed by this device at the moment of capture and its fingerprint is recorded on Solana.</p>
+
+    <div class="two" style="margin-top:24px">
+      <div class="card">
+        <div id="insecure" class="status flagged" hidden style="margin-top:0">
+          <h3>Secure connection required</h3>
+          <p class="small">Browsers only allow the live camera on secure pages. Open <span class="mono" id="httpsUrl"></span> and accept the certificate notice.</p>
+        </div>
+        <button class="btn block" id="start" type="button">Open camera</button>
+        <div id="camBox" hidden>
+          <video id="video" class="preview" autoplay playsinline muted></video>
+          <div class="shutterbar"><button class="shutter" id="snap" type="button" aria-label="Take photo"></button></div>
+        </div>
+        <img id="preview" class="preview" hidden alt="Captured photo" />
+        <div id="result"></div>
+      </div>
+
+      <div class="card subtle">
+        <h3>Device</h3>
+        <p class="mono" id="addr" style="margin:0 0 4px"></p>
+        <p class="muted small" style="margin:0">This device’s key signs every capture. The same address receives approved claim payments.</p>
+        <ol class="steps" id="steps">
+          <li>One-time challenge from server</li>
+          <li>Fingerprint (SHA-512) and device signature</li>
+          <li>Recorded on Solana</li>
+        </ol>
+      </div>
+    </div>
+  </main>
+
+  <script type="module">
+    import { nav, deviceAddress, signPhoto, post, setStep, degradedCopy, esc, fmtTime } from '/device.js';
+    nav('/capture.html', 'claimant');
+    const $ = (id) => document.getElementById(id);
+    $('addr').textContent = deviceAddress();
+    const steps = $('steps');
+    let stream = null;
+    let lastBlob = null;
+
+    if (!window.isSecureContext || !navigator.mediaDevices?.getUserMedia) {
+      $('insecure').hidden = false;
+      $('httpsUrl').textContent = `https://${location.hostname}:3443${location.pathname}`;
+      $('start').hidden = true;
+    }
+
+    async function openCamera() {
+      try {
+        stream = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: { ideal: 'environment' }, width: { ideal: 1920 }, height: { ideal: 1080 } },
+          audio: false,
+        });
+        $('video').srcObject = stream;
+        $('camBox').hidden = false;
+        $('start').hidden = true;
+        $('preview').hidden = true;
+        $('result').innerHTML = '';
+        [...steps.children].forEach((li) => (li.className = ''));
+      } catch (e) {
+        $('result').innerHTML = `<div class="status flagged"><h3>Camera unavailable</h3><p class="small">${esc(e.message)}</p></div>`;
+      }
+    }
+    $('start').onclick = openCamera;
+
+    $('snap').onclick = async () => {
+      setStep(steps, 0, 'active');
+      let challenge;
+      try {
+        ({ challenge } = await fetch('/api/challenge').then((r) => r.json()));
+      } catch (e) {
+        setStep(steps, 0, 'fail');
+        return;
+      }
+      setStep(steps, 0, 'done');
+
+      const v = $('video');
+      const c = document.createElement('canvas');
+      c.width = v.videoWidth;
+      c.height = v.videoHeight;
+      c.getContext('2d').drawImage(v, 0, 0);
+      stream?.getTracks().forEach((t) => t.stop());
+      $('camBox').hidden = true;
+      const blob = await new Promise((r) => c.toBlob(r, 'image/jpeg', 0.92));
+      lastBlob = blob;
+      $('preview').src = URL.createObjectURL(blob);
+      $('preview').hidden = false;
+
+      try {
+        setStep(steps, 1, 'active');
+        const signed = await signPhoto(blob, challenge);
+        setStep(steps, 1, 'done');
+        setStep(steps, 2, 'active');
+        const fd = new FormData();
+        fd.append('image', blob, 'photo.jpg');
+        fd.append('pubkey', signed.pubkey);
+        fd.append('signature', signed.signature);
+        fd.append('challenge', challenge);
+        const { photo } = await post('/api/register', fd);
+        setStep(steps, 2, 'done');
+        $('result').innerHTML = `
+          <div class="status verified">
+            <h3>Evidence recorded</h3>
+            <p class="small">Captured ${fmtTime(photo.capturedAt)} · <a href="${photo.explorer}" target="_blank" rel="noopener">View Solana record</a></p>
+          </div>
+          <div class="row" style="margin-top:14px">
+            <a class="btn" href="/claim.html?photo=${photo.id}">Submit a claim with this photo</a>
+            <button class="btn secondary" id="again" type="button">Retake</button>
+            <button class="btn secondary" id="dl" type="button">Download compressed copy</button>
+          </div>`;
+        $('again').onclick = openCamera;
+        $('dl').onclick = async () => {
+          const copy = await degradedCopy(lastBlob);
+          const a = document.createElement('a');
+          a.href = URL.createObjectURL(copy);
+          a.download = `fraudbusters-compressed-${photo.id}.jpg`;
+          a.click();
+        };
+      } catch (e) {
+        const i = [...steps.children].findIndex((li) => li.className === 'active');
+        setStep(steps, i < 0 ? 2 : i, 'fail');
+        $('result').innerHTML = `<div class="status flagged"><h3>Could not record</h3><p class="small">${esc(e.message)}</p></div>
+          <button class="btn secondary" id="retry" type="button" style="margin-top:12px">Try again</button>`;
+        $('retry').onclick = openCamera;
+      }
+    };
+  </script>
+</body>
+</html>

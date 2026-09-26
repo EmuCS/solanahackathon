@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Verify a photo · FraudBusters</title>
+  <link rel="stylesheet" href="/app.css" />
+  <script src="/vendor/nacl-fast.min.js"></script>
+</head>
+<body>
+  <main>
+    <p class="eyebrow">Verification API</p>
+    <h1>Verify a photo</h1>
+    <p class="lede">Any insurer, loss adjuster or AI agent can check a photo against the registry for $0.01 per request via Pay.sh. No account, no API key, no contract.</p>
+
+    <div class="two" style="margin-top:24px">
+      <div class="card">
+        <label for="image" style="margin-top:0">Photo</label>
+        <input id="image" type="file" accept="image/*" />
+        <label class="row" style="font-weight:400;color:var(--muted)"><input type="checkbox" id="degrade" /> Simulate messaging-app compression first (downscaled, re-encoded, metadata removed)</label>
+        <img id="preview" class="preview" hidden style="margin-top:12px" alt="Photo to verify" />
+        <p class="muted small" id="sizes" style="margin:8px 0 0"></p>
+        <button class="btn block" id="go" style="margin-top:16px" disabled>Run verification</button>
+      </div>
+      <div class="card" id="out" hidden>
+        <div id="result" style="margin-top:-16px"></div>
+      </div>
+    </div>
+  </main>
+
+  <script type="module">
+    import { nav, post, degradedCopy, esc, fmtTime, checksHtml, paymentsHtml } from '/device.js';
+    nav('/verify.html', 'insurer');
+    const $ = (id) => document.getElementById(id);
+    let blob = null;
+
+    async function prepare() {
+      const f = $('image').files[0];
+      if (!f) return;
+      blob = $('degrade').checked ? await degradedCopy(f) : f;
+      $('preview').src = URL.createObjectURL(blob);
+      $('preview').hidden = false;
+      $('go').disabled = false;
+      $('sizes').textContent = $('degrade').checked ? `Compressed copy ${(blob.size / 1024).toFixed(0)} KB (original ${(f.size / 1024).toFixed(0)} KB)` : '';
+    }
+    $('image').onchange = prepare;
+    $('degrade').onchange = prepare;
+
+    $('go').onclick = async () => {
+      $('go').disabled = true;
+      $('go').textContent = 'Verifying…';
+      $('out').hidden = false;
+      $('result').innerHTML = '<p class="muted" style="margin-top:16px">Paying for registry check via Pay.sh…</p>';
+      try {
+        const fd = new FormData();
+        fd.append('image', blob, 'check.jpg');
+        const { verification: v, checks, payments } = await post('/api/check', fd);
+        const fails = checks.filter((c) => c.status === 'fail').length;
+        const [cls, title, sub] = v.verified
+          ? [fails ? 'flagged' : 'verified', fails ? 'Authentic capture, with red flags' : 'Authentic capture', `Captured ${fmtTime(v.photo.capturedAt)} by device <span class="mono">${esc(v.photo.device.slice(0, 8))}…</span>`]
+          : [fails ? 'flagged' : 'review', fails ? 'Unverified, with red flags' : 'No capture record', 'Not captured in FraudBusters. Origin cannot be proven; treat as unverified.'];
+        $('result').innerHTML = `<div class="status ${cls}"><h3>${title}</h3><p class="small">${sub}</p></div>${checksHtml(checks)}${paymentsHtml(payments)}`;
+      } catch (e) {
+        $('result').innerHTML = `<div class="status flagged"><h3>Verification failed</h3><p class="small">${esc(e.message)}</p></div>`;
+      } finally {
+        $('go').disabled = false;
+        $('go').textContent = 'Run verification';
+      }
+    };
+  </script>
+</body>
+</html>

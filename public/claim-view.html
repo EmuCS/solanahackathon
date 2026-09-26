@@ -1,0 +1,128 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Claim file · FraudBusters</title>
+  <link rel="stylesheet" href="/app.css" />
+  <script src="/vendor/nacl-fast.min.js"></script>
+</head>
+<body>
+  <main>
+    <p class="eyebrow" id="crumb"><a href="/adjuster.html">Adjuster queue</a></p>
+    <h1 id="title">Loading…</h1>
+    <div class="two" id="body" hidden style="margin-top:20px">
+      <div>
+        <div class="card">
+          <img id="img" class="preview" alt="Claim evidence" />
+        </div>
+        <div class="card" id="aiCard" hidden style="margin-top:16px">
+          <h3>AI damage assessment</h3>
+          <div id="ai"></div>
+        </div>
+        <div class="card" style="margin-top:16px">
+          <ul class="kv" id="facts"></ul>
+        </div>
+        <div class="card" id="histCard" hidden style="margin-top:16px">
+          <h3>Claimant history across all insurers</h3>
+          <p class="muted small" style="margin:0 0 10px">From the shared registry: claims this claimant filed anywhere in the last 30 days.</p>
+          <div id="hist"></div>
+        </div>
+      </div>
+      <div>
+        <div class="card">
+          <div id="verdict" style="margin-top:-16px"></div>
+          <div id="actions"></div>
+        </div>
+        <div class="card" style="margin-top:16px">
+          <h3>Evidence checks</h3>
+          <div id="checks"></div>
+          <div id="payments"></div>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <script type="module">
+    import { nav, esc, short, checksHtml, paymentsHtml, STATUS, statusKey, badge, eur, fmtTime, post } from '/device.js';
+    nav('/adjuster.html', 'insurer');
+    const $ = (id) => document.getElementById(id);
+    const id = new URLSearchParams(location.search).get('id');
+
+    function render(c) {
+      const k = statusKey(c.status);
+      $('crumb').innerHTML = `<a href="/adjuster.html">Claims queue</a> / ${esc(c.insurerName)} / ${esc(c.id)}`;
+      $('title').innerHTML = `${eur(c.amount)} · ${esc(c.description || 'Claim')}`;
+      $('img').src = c.image;
+      $('facts').innerHTML = [
+        ['Status', badge(c.status)],
+        ['Filed', fmtTime(c.createdAt)],
+        ['Insurer', esc(c.insurerName)],
+        ['Claimant', `<span class="mono">${esc(short(c.claimant))}</span>`],
+        ['Evidence', c.tier === 'verified' ? 'Captured live in FraudBusters' : 'Uploaded from elsewhere'],
+        ['Claim record', `<a href="${c.explorer}" target="_blank" rel="noopener">Solana transaction</a>`],
+        ...(c.decisionExplorer ? [[c.status === 'paid' ? 'Payment' : 'Decision', `<a href="${c.decisionExplorer}" target="_blank" rel="noopener">Solana transaction</a>${c.decidedAt ? ` <span class="muted">· ${fmtTime(c.decidedAt)}</span>` : ''}`]] : []),
+      ]
+        .map(([a, b]) => `<li><span>${a}</span><span>${b}</span></li>`)
+        .join('');
+      $('verdict').innerHTML = `<div class="status ${k}"><h3>${STATUS[k]?.title || esc(c.status)}</h3><p class="small">${esc(c.reason)}</p></div>`;
+      $('checks').innerHTML = checksHtml(c.checks);
+      const a = c.assessment;
+      $('aiCard').hidden = !a;
+      if (a) {
+        const ratio = a.high ? c.amount / a.high : null;
+        $('ai').innerHTML = `<ul class="kv">
+          <li><span>Visible damage</span><span>${esc(a.damage)} <span class="badge review">${esc(a.severity)}</span></span></li>
+          <li><span>Typical repair</span><span class="num">${a.high ? `${eur(a.low)} – ${eur(a.high)}` : 'none'}</span></li>
+          <li><span>Claimed</span><span class="num">${eur(c.amount)}${ratio && ratio > 1.25 ? ` <span class="badge flagged">${ratio.toFixed(1)}× upper estimate</span>` : ''}</span></li>
+        </ul><p class="muted small" style="margin:10px 0 0">Rough estimate at Irish prices to triage, not a quote (${esc(a.via)}).</p>`;
+      }
+      $('histCard').hidden = !c.history;
+      if (c.history) {
+        $('hist').innerHTML = c.history.length
+          ? `<ul class="kv">${c.history.map((h) => `<li><span>${fmtTime(h.at)}</span><span>${badge(h.status)} ${eur(h.amount)} · ${esc(h.insurer)}${h.explorer ? ` · <a href="${h.explorer}" target="_blank" rel="noopener">record</a>` : ''}</span></li>`).join('')}</ul>`
+          : '<p class="small" style="margin:0">No earlier claims on the registry.</p>';
+      }
+      $('payments').innerHTML = paymentsHtml(c.payments);
+
+      const open = !['paid', 'rejected'].includes(c.status);
+      $('actions').innerHTML = open
+        ? `<p class="muted small" style="margin:16px 0 10px">${
+            k === 'verified'
+              ? 'The evidence is authentic, unedited and unused. Confirm that it shows the damage claimed before approving.'
+              : 'Review the findings below and confirm the photo shows the damage claimed before deciding.'
+          }</p>
+           ${k === 'flagged' ? '<div class="notice" style="margin-bottom:10px">This claim failed at least one check. Approving overrides the fraud flag.</div>' : ''}
+           <div class="row">
+             <button class="btn" id="approve">Approve and pay ${eur(c.amount)}</button>
+             <button class="btn danger" id="reject">Reject</button>
+           </div>
+           <p class="muted small" id="actMsg" style="margin:10px 0 0"></p>`
+        : '';
+      if (open) {
+        const act = async (action) => {
+          $('approve').disabled = $('reject').disabled = true;
+          $('actMsg').textContent = action === 'approve' ? 'Settling payment on Solana…' : 'Recording decision…';
+          const t0 = performance.now();
+          try {
+            const { claim } = await post(`/api/claims/${c.id}/decision`, { action });
+            render(claim);
+            if (action === 'approve') $('verdict').insertAdjacentHTML('beforeend', `<p class="muted small" style="margin:8px 0 0">Settled in ${((performance.now() - t0) / 1000).toFixed(1)} s.</p>`);
+          } catch (e) {
+            $('actMsg').textContent = e.message;
+            $('approve').disabled = $('reject').disabled = false;
+          }
+        };
+        $('approve').onclick = () => act('approve');
+        $('reject').onclick = () => act('reject');
+      }
+      $('body').hidden = false;
+    }
+
+    const r = await fetch(`/api/claims/${encodeURIComponent(id)}`);
+    const c = await r.json();
+    if (!r.ok) $('title').textContent = c.error || 'Claim not found';
+    else render(c);
+  </script>
+</body>
+</html>

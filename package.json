@@ -1,0 +1,30 @@
+{
+  "name": "fraudbusters",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Verified-capture photos anchored on Solana; instant stablecoin payouts for verified insurance claims; pay-per-check verification via Pay.sh.",
+  "type": "module",
+  "scripts": {
+    "setup": "node --env-file-if-exists=.env scripts/setup.js",
+    "cert": "node scripts/cert.js",
+    "dev": "node --env-file-if-exists=.env --watch src/server.js",
+    "start": "node --env-file-if-exists=.env src/server.js",
+    "gateway": "node --env-file-if-exists=.env scripts/gateway.js",
+    "reindex": "node --env-file-if-exists=.env scripts/reindex.js"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.128.0",
+    "@solana/spl-token": "^0.4.15",
+    "@solana/web3.js": "^1.99.0",
+    "bs58": "^6.0.0",
+    "exif-reader": "^2.0.3",
+    "express": "^5.2.1",
+    "multer": "^2.4.0",
+    "sharp": "^0.35.4",
+    "tweetnacl": "^1.0.3",
+    "zod": "^4.6.5"
+  },
+  "devDependencies": {
+    "@solana/pay": "^1.0.26"
+  }
+}

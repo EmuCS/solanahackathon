@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Logo options · FraudBusters</title>
+  <link rel="stylesheet" href="/app.css" />
+  <script src="/vendor/nacl-fast.min.js"></script>
+  <style>
+    .opt { display: grid; grid-template-columns: 1fr 1fr; border: 1px solid var(--line); border-radius: var(--radius); overflow: hidden; }
+    .opt + .opt { margin-top: 16px; }
+    .dark, .light { display: flex; align-items: center; gap: 28px; padding: 28px; }
+    .dark { background: var(--ink); color: #fff; }
+    .light { background: #fff; color: var(--ink); }
+    .big .mark { width: 96px; height: 96px; }
+    .lock { display: flex; align-items: center; gap: 12px; }
+    .lock .mark { width: 36px; height: 36px; }
+    .lock b { font-weight: 800; font-size: 20px; letter-spacing: .08em; }
+    .meta { grid-column: 1 / -1; display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 14px 20px; border-top: 1px solid var(--line); flex-wrap: wrap; }
+    @media (max-width: 720px) { .opt { grid-template-columns: 1fr; } }
+  </style>
+</head>
+<body>
+  <main>
+    <p class="eyebrow">Brand</p>
+    <h1>Logo options</h1>
+    <p class="lede">Pick one. The choice applies to the header in this browser immediately.</p>
+    <div id="opts" style="margin-top:24px"></div>
+  </main>
+  <script type="module">
+    import { nav, LOGOS, currentLogo } from '/device.js';
+    nav('', 'insurer');
+    const INFO = {
+      strike: ['Strike', 'Faceted shield with a clean cut through it. Protection, and fraud stopped.'],
+      fang: ['Fang', 'Umbrella canopy with a fanged edge and a blade handle. Aggressive cover.'],
+      bastion: ['Bastion', 'Umbrella held inside a shield wall. Insurance inside defence.'],
+    };
+    function render() {
+      const cur = currentLogo();
+      document.getElementById('opts').innerHTML = Object.keys(LOGOS)
+        .map(
+          (k) => `<section class="opt">
+            <div class="dark"><span class="big">${LOGOS[k](`${k}-d1`)}</span><span class="lock">${LOGOS[k](`${k}-d2`)}<b>FRAUDBUSTERS</b></span></div>
+            <div class="light"><span class="big">${LOGOS[k](`${k}-l1`)}</span><span class="lock">${LOGOS[k](`${k}-l2`)}<b>FRAUDBUSTERS</b></span></div>
+            <div class="meta"><div><b>${INFO[k][0]}</b> <span class="muted small">${INFO[k][1]}</span></div>
+              ${k === cur ? '<span class="badge verified">In use</span>' : `<button class="btn secondary" data-k="${k}">Use this</button>`}</div>
+          </section>`,
+        )
+        .join('');
+      document.querySelectorAll('[data-k]').forEach((b) => (b.onclick = () => {
+        try { localStorage.setItem('fraudbusters.logo', b.dataset.k); } catch {}
+        location.reload();
+      }));
+    }
+    render();
+  </script>
+</body>
+</html>
