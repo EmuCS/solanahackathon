@@ -1,0 +1,69 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="theme-color" content="#0b0d12" />
+  <title>Connect wallet · FraudBusters</title>
+  <link rel="stylesheet" href="/app.css" />
+  <script src="/vendor/nacl-fast.min.js"></script>
+</head>
+<body>
+  <main>
+    <p class="eyebrow">Claimant app</p>
+    <h1>Receive payments in your wallet</h1>
+    <p class="lede">Approve one message in your wallet. From then on, approved claim payments from your insurer go to this wallet. Signing a message never moves money.</p>
+    <div class="card" style="margin-top:24px">
+      <p class="muted small" style="margin:0">Device</p>
+      <p class="mono" id="device" style="margin:4px 0 16px"></p>
+      <div class="row" id="buttons"></div>
+      <div id="result"></div>
+    </div>
+  </main>
+
+  <script type="module">
+    import { nav, esc, short } from '/device.js';
+    import { WALLETS, available, connect, signText } from '/wallet.js';
+    nav('', 'claimant');
+    const $ = (id) => document.getElementById(id);
+    const q = new URLSearchParams(location.search);
+    const device = q.get('device') || '';
+    const token = q.get('token') || '';
+    $('device').textContent = short(device);
+    const say = (cls, title, text) => ($('result').innerHTML = `<div class="status ${cls}"><h3>${esc(title)}</h3><p class="small">${text}</p></div>`);
+
+    async function link(name) {
+      try {
+        say('review', `Approve in ${name}`, 'Check the message shows your device, then approve it.');
+        const w = await connect(name);
+        const { message } = await fetch(`/api/link/message?device=${encodeURIComponent(device)}&token=${encodeURIComponent(token)}`).then((r) => r.json());
+        const signature = await signText(w, message);
+        const r = await fetch('/api/link/finish', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ device, token, wallet: w.address, walletName: name, signature }),
+        });
+        const j = await r.json();
+        if (!r.ok) throw new Error(j.error);
+        $('buttons').innerHTML = '';
+        say('verified', 'Wallet connected', `Payments now go to ${esc(name)} <span class="mono">${esc(short(w.address))}</span> · <a href="${esc(j.link.explorer)}" target="_blank" rel="noopener">link record on Solana</a>. You can go back to the FraudBusters app.`);
+      } catch (e) {
+        say('flagged', 'Not connected', esc(e.message || String(e)));
+      }
+    }
+
+    // Wallet browsers inject their provider shortly after load
+    const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+    for (let i = 0; i < 10 && !available().length; i++) await wait(200);
+    const here = available();
+    if (!device || !token) say('flagged', 'Link incomplete', 'Start again from “Connect wallet” in the FraudBusters app.');
+    else if (here.length) {
+      $('buttons').innerHTML = here.map((n) => `<button class="btn" type="button" data-w="${n}">Connect ${n}</button>`).join('');
+      $('buttons').querySelectorAll('button').forEach((b) => (b.onclick = () => link(b.dataset.w)));
+    } else {
+      $('buttons').innerHTML = Object.keys(WALLETS).map((n) => `<a class="btn secondary" href="${WALLETS[n].browse(location.href)}">Open in ${n}</a>`).join('');
+      say('review', 'Open this page in your wallet app', 'Phantom and Solflare can only sign inside their own app or browser extension.');
+    }
+  </script>
+</body>
+</html>

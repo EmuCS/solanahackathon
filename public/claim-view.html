@@ -2,7 +2,14 @@
 <html lang="en">
 <head>
   <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="theme-color" content="#0b0d12" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="FraudBusters" />
+  <link rel="manifest" href="/manifest.webmanifest" />
+  <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png" />
   <title>Claim file · FraudBusters</title>
   <link rel="stylesheet" href="/app.css" />
   <script src="/vendor/nacl-fast.min.js"></script>
@@ -15,6 +22,7 @@
       <div>
         <div class="card">
           <img id="img" class="preview" alt="Claim evidence" />
+          <div class="shotstrip" id="shots" hidden></div>
         </div>
         <div class="card" id="aiCard" hidden style="margin-top:16px">
           <h3>AI damage assessment</h3>
@@ -32,6 +40,7 @@
       <div>
         <div class="card">
           <div id="verdict" style="margin-top:-16px"></div>
+          <div class="walletbar" id="adjWallet"></div>
           <div id="actions"></div>
         </div>
         <div class="card" style="margin-top:16px">
@@ -45,22 +54,44 @@
 
   <script type="module">
     import { nav, esc, short, checksHtml, paymentsHtml, STATUS, statusKey, badge, eur, fmtTime, post } from '/device.js';
+    import { signText, mountAdjusterWallet } from '/wallet.js';
     nav('/adjuster.html', 'insurer');
     const $ = (id) => document.getElementById(id);
     const id = new URLSearchParams(location.search).get('id');
+
+    // Adjuster's wallet: signs every decision; the signature is recorded on Solana with it
+    let adj = null;
+    await mountAdjusterWallet($('adjWallet'), (w) => (adj = w));
 
     function render(c) {
       const k = statusKey(c.status);
       $('crumb').innerHTML = `<a href="/adjuster.html">Claims queue</a> / ${esc(c.insurerName)} / ${esc(c.id)}`;
       $('title').innerHTML = `${eur(c.amount)} · ${esc(c.description || 'Claim')}`;
       $('img').src = c.image;
+      $('shots').hidden = !c.shots;
+      if (c.shots) {
+        const name = (s) => (s.side ? `From the ${s.side}` : { wide: 'Wide', close: 'Close-up' }[s.shot] || s.shot);
+        $('shots').innerHTML = c.shots
+          .map((s) => `<figure><a href="${esc(s.image)}" target="_blank" rel="noopener"><img src="${esc(s.image)}" alt="${esc(name(s))}" /></a><figcaption>${esc(name(s))} · <a href="${esc(s.explorer)}" target="_blank" rel="noopener">record</a></figcaption></figure>`)
+          .join('');
+      }
       $('facts').innerHTML = [
         ['Status', badge(c.status)],
         ['Filed', fmtTime(c.createdAt)],
         ['Insurer', esc(c.insurerName)],
         ['Claimant', `<span class="mono">${esc(short(c.claimant))}</span>`],
-        ['Evidence', c.tier === 'verified' ? 'Captured live in FraudBusters' : 'Uploaded from elsewhere'],
+        ['Evidence', c.tier === 'verified' ? `Captured live in FraudBusters${c.shots ? ' (3-shot set)' : ''}` : 'Uploaded from elsewhere'],
         ['Claim record', `<a href="${c.explorer}" target="_blank" rel="noopener">Solana transaction</a>`],
+        ...(c.offers?.length
+          ? [['Offers', c.offers.map((o) => `${eur(o.amount)} <span class="muted">· ${esc({ accept: 'accepted', decline: 'declined' }[o.response] || 'waiting for claimant')}</span>`).join('<br>')]]
+          : []),
+        ...(c.status === 'paid' && c.paidAmount != null && c.paidAmount !== c.amount ? [['Paid', `${eur(c.paidAmount)} <span class="muted">of ${eur(c.amount)} claimed</span>`]] : []),
+        ...(c.status !== 'rejected' && c.payoutTo
+          ? [[c.status === 'paid' ? 'Paid to' : 'Pays to', `${esc(c.payoutWallet ? `${c.payoutWallet} wallet` : 'Device wallet')} <span class="mono muted">${esc(short(c.payoutTo))}</span>`]]
+          : []),
+        ...(c.decidedBy || c.offeredBy
+          ? [['Signed by', `${esc((c.decidedBy || c.offeredBy).walletName)} <span class="mono muted">${esc(short((c.decidedBy || c.offeredBy).wallet))}</span> <span class="muted">(adjuster)</span>`]]
+          : []),
         ...(c.decisionExplorer ? [[c.status === 'paid' ? 'Payment' : 'Decision', `<a href="${c.decisionExplorer}" target="_blank" rel="noopener">Solana transaction</a>${c.decidedAt ? ` <span class="muted">· ${fmtTime(c.decidedAt)}</span>` : ''}`]] : []),
       ]
         .map(([a, b]) => `<li><span>${a}</span><span>${b}</span></li>`)
@@ -71,8 +102,14 @@
       $('aiCard').hidden = !a;
       if (a) {
         const ratio = a.high ? c.amount / a.high : null;
-        $('ai').innerHTML = `<ul class="kv">
-          <li><span>Visible damage</span><span>${esc(a.damage)} <span class="badge review">${esc(a.severity)}</span></span></li>
+        const sev = (s) => `<span class="badge sev-${esc(s)}">${esc(s)}</span>`;
+        const parts = a.parts?.length
+          ? `<table class="parts"><thead><tr><th>Part</th><th>Damage</th><th>Severity</th></tr></thead><tbody>${a.parts
+              .map((p) => `<tr><td>${esc(p.part)}</td><td>${esc(p.damageType)}</td><td>${sev(p.severity)}</td></tr>`)
+              .join('')}</tbody></table>`
+          : '';
+        $('ai').innerHTML = `${parts}<ul class="kv">
+          <li><span>Visible damage</span><span>${esc(a.damage)} ${sev(a.severity)}</span></li>
           <li><span>Typical repair</span><span class="num">${a.high ? `${eur(a.low)} – ${eur(a.high)}` : 'none'}</span></li>
           <li><span>Claimed</span><span class="num">${eur(c.amount)}${ratio && ratio > 1.25 ? ` <span class="badge flagged">${ratio.toFixed(1)}× upper estimate</span>` : ''}</span></li>
         </ul><p class="muted small" style="margin:10px 0 0">Rough estimate at Irish prices to triage, not a quote (${esc(a.via)}).</p>`;
@@ -86,35 +123,73 @@
       $('payments').innerHTML = paymentsHtml(c.payments);
 
       const open = !['paid', 'rejected'].includes(c.status);
+      const start = c.status === 'offered' ? c.offerAmount : c.amount;
+      const aiHigh = c.assessment?.high && c.assessment.high < c.amount ? c.assessment.high : null;
       $('actions').innerHTML = open
         ? `<p class="muted small" style="margin:16px 0 10px">${
-            k === 'verified'
-              ? 'The evidence is authentic, unedited and unused. Confirm that it shows the damage claimed before approving.'
-              : 'Review the findings below and confirm the photo shows the damage claimed before deciding.'
+            k === 'offered'
+              ? `Offer of ${eur(c.offerAmount)} sent ${fmtTime(c.offeredAt)}. You can still revise it, pay the full amount or reject.`
+              : k === 'verified'
+                ? 'The evidence is authentic, unedited and unused. Confirm that it shows the damage claimed before approving.'
+                : 'Review the findings below and confirm the photo shows the damage claimed before deciding.'
           }</p>
            ${k === 'flagged' ? '<div class="notice" style="margin-bottom:10px">This claim failed at least one check. Approving overrides the fraud flag.</div>' : ''}
-           <div class="row">
-             <button class="btn" id="approve">Approve and pay ${eur(c.amount)}</button>
+           <div class="offer">
+             <label for="payAmt" style="margin-top:0">Amount to pay (EUR)</label>
+             <input id="payAmt" type="number" min="0.01" step="0.01" max="${c.amount}" value="${start}" />
+             <div class="small muted" style="margin-top:6px">Claimed ${eur(c.amount)}${aiHigh ? ` · <a href="#" id="useAi">use AI upper estimate ${eur(aiHigh)}</a>` : ''}</div>
+             <label for="payNote">Note to the claimant (optional)</label>
+             <input id="payNote" maxlength="280" placeholder="e.g. Headlight covered, bumper trim excluded" value="${esc(c.status === 'offered' ? c.offerNote || '' : '')}" />
+           </div>
+           <div class="row" style="margin-top:12px">
+             <button class="btn" id="approve"></button>
              <button class="btn danger" id="reject">Reject</button>
            </div>
            <p class="muted small" id="actMsg" style="margin:10px 0 0"></p>`
         : '';
       if (open) {
+        const amt = () => Math.round(Number($('payAmt').value) * 100) / 100;
+        const isOffer = () => amt() < c.amount;
+        const label = () => {
+          $('approve').textContent = !(amt() > 0) ? 'Enter an amount' : isOffer() ? `Send offer of ${eur(amt())}` : `Approve and pay ${eur(c.amount)}`;
+          $('approve').disabled = !(amt() > 0);
+        };
+        label();
+        $('payAmt').oninput = label;
+        if ($('useAi')) $('useAi').onclick = (e) => { e.preventDefault(); $('payAmt').value = aiHigh; label(); };
         const act = async (action) => {
+          if (!adj) return ($('actMsg').textContent = 'Connect your wallet first: every decision is signed by the adjuster.');
           $('approve').disabled = $('reject').disabled = true;
-          $('actMsg').textContent = action === 'approve' ? 'Settling payment on Solana…' : 'Recording decision…';
-          const t0 = performance.now();
           try {
-            const { claim } = await post(`/api/claims/${c.id}/decision`, { action });
+            $('actMsg').textContent = `Approve the decision in ${adj.name}…`;
+            const d = await fetch(`/api/claims/${c.id}/decision-message?action=${action}&amount=${amt()}`).then((r) => r.json());
+            if (d.error) throw new Error(d.error);
+            const signature = await signText(adj, d.message);
+            $('actMsg').textContent = { approve: 'Settling payment on Solana…', offer: 'Sending offer…', reject: 'Recording decision…' }[d.action];
+            const t0 = performance.now();
+            const { claim } = await post(`/api/claims/${c.id}/decision`, {
+              action: d.action, amount: d.amount, note: $('payNote').value, message: d.message, signature, wallet: adj.address, walletName: adj.name,
+            });
             render(claim);
-            if (action === 'approve') $('verdict').insertAdjacentHTML('beforeend', `<p class="muted small" style="margin:8px 0 0">Settled in ${((performance.now() - t0) / 1000).toFixed(1)} s.</p>`);
+            if (claim.status === 'paid') $('verdict').insertAdjacentHTML('beforeend', `<p class="muted small" style="margin:8px 0 0">Settled in ${((performance.now() - t0) / 1000).toFixed(1)} s.</p>`);
           } catch (e) {
             $('actMsg').textContent = e.message;
-            $('approve').disabled = $('reject').disabled = false;
+            $('reject').disabled = false;
+            label();
           }
         };
-        $('approve').onclick = () => act('approve');
+        $('approve').onclick = () => act(isOffer() ? 'offer' : 'approve');
         $('reject').onclick = () => act('reject');
+      }
+      // While an offer is out, follow the claimant's answer live
+      clearTimeout(window.offerPoll);
+      if (c.status === 'offered') {
+        const poll = async () => {
+          const fresh = await fetch(`/api/claims/${encodeURIComponent(c.id)}`).then((r) => r.json()).catch(() => null);
+          if (fresh && fresh.status !== 'offered') render(fresh);
+          else window.offerPoll = setTimeout(poll, 3000);
+        };
+        window.offerPoll = setTimeout(poll, 3000);
       }
       $('body').hidden = false;
     }

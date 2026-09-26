@@ -2,7 +2,14 @@
 <html lang="en">
 <head>
   <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="theme-color" content="#0b0d12" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="FraudBusters" />
+  <link rel="manifest" href="/manifest.webmanifest" />
+  <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png" />
   <title>Adjuster queue · FraudBusters</title>
   <link rel="stylesheet" href="/app.css" />
   <script src="/vendor/nacl-fast.min.js"></script>
@@ -12,6 +19,7 @@
     <p class="eyebrow">Step 3 · Insurer</p>
     <h1>Adjuster queue</h1>
     <p class="lede">Every claim arrives with its evidence checks and reasons. Nothing is paid until an adjuster approves it.</p>
+    <div class="walletbar" id="adjWallet" style="max-width:640px"></div>
 
     <div class="row" style="margin:24px 0 14px">
       <select id="insurer" style="width:auto"></select>
@@ -30,11 +38,13 @@
 
   <script type="module">
     import { nav, esc, badge, eur, fmtTime, statusKey } from '/device.js';
+    import { mountAdjusterWallet } from '/wallet.js';
     nav('/adjuster.html', 'insurer');
+    mountAdjusterWallet(document.getElementById('adjWallet'));
     const $ = (id) => document.getElementById(id);
     const cfg = await fetch('/api/config').then((r) => r.json());
     $('insurer').innerHTML = `<option value="">All insurers</option>` + Object.entries(cfg.insurers).map(([k, v]) => `<option value="${k}">${esc(v)}</option>`).join('');
-    const ORDER = { flagged: 0, verified: 1, review: 2, paid: 3, rejected: 4 };
+    const ORDER = { flagged: 0, verified: 1, review: 2, offered: 3, paid: 4, rejected: 5 };
 
     async function load() {
       const all = await fetch(`/api/claims?insurer=${$('insurer').value}`).then((r) => r.json());

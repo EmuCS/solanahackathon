@@ -43,6 +43,8 @@ function table(name) {
 
 export const photos = table('photos');
 export const claims = table('claims');
+// Device key → external wallet (Phantom / Solflare) that receives the claimant's payouts
+export const links = table('links');
 
 export function findPhoto(dh) {
   let best = null;
@@ -55,13 +57,14 @@ export function findPhoto(dh) {
 
 // Same claim photo = same on-chain capture record, or a near-identical fingerprint.
 // Merely similar images (e.g. a re-shoot of the same dent) are returned separately as a warning.
-const SAME_THRESHOLD = 4;
+// Claims made with a guided set match on any of their three shots.
+export const SAME_THRESHOLD = 4;
 export function findClaims(dh, photoId) {
   const same = [];
   const similar = [];
   for (const c of claims.all()) {
-    const d = hamming(dh, c.dhash);
-    if ((photoId && c.photoId === photoId) || d <= SAME_THRESHOLD) same.push(c);
+    const d = Math.min(...[c.dhash, ...(c.shotHashes || [])].map((h) => hamming(dh, h)));
+    if ((photoId && (c.photoId === photoId || c.shotIds?.includes(photoId))) || d <= SAME_THRESHOLD) same.push(c);
     else if (d <= MATCH_THRESHOLD && !(photoId && c.photoId)) similar.push(c);
   }
   return { same, similar };

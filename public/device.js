@@ -52,6 +52,17 @@ export async function signPhoto(blob, challenge) {
   return { sha, signature: b58(sig), pubkey: b58(kp.publicKey) };
 }
 
+// Any text signed with this device key (base58 signature)
+export function signWithDevice(text) {
+  return b58(nacl.sign.detached(new TextEncoder().encode(text), getDevice().secretKey));
+}
+
+// Claimant's answer to an offer, signed by the same device key that gets paid
+export function signOfferAnswer(claimId, action, amount) {
+  const msg = `fraudbusters:offer:v1:${claimId}:${action}:${Number(amount).toFixed(2)}`;
+  return b58(nacl.sign.detached(new TextEncoder().encode(msg), getDevice().secretKey));
+}
+
 // Simulates what WhatsApp / X / a screenshot does: downscale, re-encode, strip metadata
 export async function degradedCopy(blob, maxDim = 720, quality = 0.45) {
   const bmp = await createImageBitmap(blob);
@@ -95,6 +106,7 @@ const STATUS_MAP = { fast_track: 'verified', manual_review: 'review' };
 export const STATUS = {
   verified: { label: 'Evidence verified', title: 'Evidence verified: awaiting adjuster' },
   review: { label: 'Standard review', title: 'Standard review' },
+  offered: { label: 'Offer sent', title: 'Offer sent: waiting for the claimant' },
   flagged: { label: 'Flagged', title: 'Flagged for fraud review' },
   paid: { label: 'Paid', title: 'Approved and paid' },
   rejected: { label: 'Rejected', title: 'Rejected' },
@@ -166,6 +178,7 @@ const ROLES = {
       ['/capture.html', 'Capture'],
       ['/claim.html', 'Submit claim'],
       ['/my-claims.html', 'My claims'],
+      ['/profile.html', 'Profile'],
     ],
   },
   insurer: {
@@ -202,6 +215,6 @@ export function nav(active, role = 'public') {
 
 // Claimant-facing statuses (never the fraud signals)
 export const claimantBadge = (s) => {
-  const cls = { Paid: 'paid', Declined: 'rejected' }[s] || 'review';
+  const cls = { Paid: 'paid', Declined: 'rejected', 'Offer received': 'offered' }[s] || 'review';
   return `<span class="badge ${cls}">${esc(s)}</span>`;
 };

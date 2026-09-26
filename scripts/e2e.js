@@ -36,11 +36,15 @@ async function submit(fields) {
   return fetch(`${BASE}/api/claims/${receipt.id}`).then((r) => r.json());
 }
 
-async function decide(id, action) {
+// Stands in for the adjuster's Phantom / Solflare wallet: signs the server-issued decision text
+const adjuster = nacl.sign.keyPair();
+async function decide(id, action, amount) {
+  const d = await fetch(`${BASE}/api/claims/${id}/decision-message?action=${action}&amount=${amount ?? ''}`).then((r) => r.json());
+  const signature = bs58.encode(nacl.sign.detached(Buffer.from(d.message), adjuster.secretKey));
   const r = await fetch(`${BASE}/api/claims/${id}/decision`, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ action }),
+    body: JSON.stringify({ action: d.action, amount: d.amount, message: d.message, signature, wallet: bs58.encode(adjuster.publicKey), walletName: 'Phantom' }),
   });
   const j = await r.json();
   if (!r.ok) throw new Error(j.error);

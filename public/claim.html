@@ -2,7 +2,14 @@
 <html lang="en">
 <head>
   <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="theme-color" content="#0b0d12" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="FraudBusters" />
+  <link rel="manifest" href="/manifest.webmanifest" />
+  <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png" />
   <title>Submit claim · FraudBusters</title>
   <link rel="stylesheet" href="/app.css" />
   <script src="/vendor/nacl-fast.min.js"></script>
@@ -28,15 +35,16 @@
           <summary>Upload a photo taken elsewhere (slower review)</summary>
           <input id="image" type="file" accept="image/*" style="margin-top:8px" />
         </details>
+        <div class="shotstrip" id="strip"></div>
         <img id="preview" class="preview" hidden style="margin-top:14px" alt="Selected evidence" />
         <button class="btn block" id="submit" style="margin-top:18px">Submit claim</button>
       </form>
 
       <div>
         <div class="card subtle">
-          <p class="muted small" style="margin:0">Payments received on this device</p>
+          <p class="muted small" style="margin:0">Payments received</p>
           <div style="font-size:28px;font-weight:700;letter-spacing:-.02em" class="num" id="balance">—</div>
-          <p class="mono muted" id="addr" style="margin:4px 0 0"></p>
+          <div id="wallet" style="margin-top:14px;padding-top:14px;border-top:1px solid var(--line)"></div>
         </div>
         <div class="card" id="result" hidden style="margin-top:16px"></div>
       </div>
@@ -45,35 +53,57 @@
 
   <script type="module">
     import { nav, deviceAddress, post, esc, eur, claimantBadge } from '/device.js';
+    import { mountPayoutWallet } from '/wallet.js';
     nav('/claim.html', 'claimant');
     const $ = (id) => document.getElementById(id);
     const me = deviceAddress();
-    $('addr').textContent = me;
+    let payTo = me; // linked Phantom / Solflare wallet, else this device
+    mountPayoutWallet($('wallet'), me, (a) => ((payTo = a), refreshBalance()), { compact: true });
 
     const cfg = await fetch('/api/config').then((r) => r.json());
     $('insurer').innerHTML = Object.entries(cfg.insurers).map(([k, v]) => `<option value="${k}">${esc(v)}</option>`).join('');
 
     async function refreshBalance() {
-      const b = await fetch(`/api/balance/${me}`).then((r) => r.json());
+      const b = await fetch(`/api/balance/${payTo}`).then((r) => r.json());
       $('balance').textContent = `${b.amount.toLocaleString('en-IE', { minimumFractionDigits: 2 })} ${b.symbol}`;
     }
     refreshBalance();
     setInterval(refreshBalance, 5000);
 
-    let selected = new URLSearchParams(location.search).get('photo');
-    function select(id, src) {
-      selected = id;
-      [...$('picker').querySelectorAll('button')].forEach((b) => b.classList.toggle('sel', b.dataset.id === id));
-      $('image').value = '';
-      $('preview').src = src;
-      $('preview').hidden = false;
-    }
+    // Evidence = a guided 3-shot set, or an older single capture
+    const params = new URLSearchParams(location.search);
+    let selected = params.get('set') ? { set: params.get('set') } : params.get('photo') ? { photo: params.get('photo') } : null;
+    const ORDER = ['wide', 'close', 'angle'];
+    const shotName = (p) => (!p.shot ? 'Single photo' : p.side ? `From the ${p.side}` : { wide: 'Wide', close: 'Close-up' }[p.shot]);
     const mine = await fetch(`/api/photos?device=${me}`).then((r) => r.json());
-    if (mine.length) {
-      $('picker').innerHTML = mine.map((p) => `<button type="button" data-id="${p.id}"><img src="${p.image}" alt="Capture ${p.id}" /></button>`).join('');
-      $('picker').querySelectorAll('button').forEach((b) => (b.onclick = () => select(b.dataset.id, b.querySelector('img').src)));
-      const pre = mine.find((p) => p.id === selected) || mine[0];
-      select(pre.id, pre.image);
+    const sets = new Map();
+    const items = [];
+    for (const p of mine) {
+      if (!p.set) items.push({ key: `photo:${p.id}`, sel: { photo: p.id }, cover: p.image, shots: [p], at: p.capturedAt });
+      else sets.set(p.set, [...(sets.get(p.set) || []), p]);
+    }
+    for (const [id, shots] of sets) {
+      if (shots.length < 3) continue; // incomplete sets can't be claimed
+      shots.sort((a, b) => ORDER.indexOf(a.shot) - ORDER.indexOf(b.shot));
+      items.push({ key: `set:${id}`, sel: { set: id }, cover: shots[1].image, shots, at: shots[2].capturedAt });
+    }
+    items.sort((a, b) => b.at.localeCompare(a.at));
+    const keyOf = (s) => (s?.set ? `set:${s.set}` : s?.photo ? `photo:${s.photo}` : '');
+    function select(item) {
+      selected = item.sel;
+      [...$('picker').querySelectorAll('button')].forEach((b) => b.classList.toggle('sel', b.dataset.key === item.key));
+      $('image').value = '';
+      $('preview').hidden = true;
+      $('strip').innerHTML = item.shots
+        .map((p) => `<figure><img src="${p.image}" alt="${esc(shotName(p))}" /><figcaption>${esc(shotName(p))}</figcaption></figure>`)
+        .join('');
+    }
+    if (items.length) {
+      $('picker').innerHTML = items
+        .map((it) => `<button type="button" data-key="${it.key}"><img src="${it.cover}" alt="Capture" /><span class="tag">${it.sel.set ? '3 shots' : '1 photo'}</span></button>`)
+        .join('');
+      $('picker').querySelectorAll('button').forEach((b) => (b.onclick = () => select(items.find((it) => it.key === b.dataset.key))));
+      select(items.find((it) => it.key === keyOf(selected)) || items[0]);
     }
 
     $('image').onchange = (e) => {
@@ -81,6 +111,7 @@
       if (!f) return;
       selected = null;
       $('picker').querySelectorAll('button').forEach((b) => b.classList.remove('sel'));
+      $('strip').innerHTML = '';
       $('preview').src = URL.createObjectURL(f);
       $('preview').hidden = false;
     };
@@ -92,7 +123,8 @@
       fd.append('amount', $('amount').value);
       fd.append('description', $('description').value);
       fd.append('pubkey', me);
-      if (selected) fd.append('photoId', selected);
+      if (selected?.set) fd.append('setId', selected.set);
+      else if (selected?.photo) fd.append('photoId', selected.photo);
       else if ($('image').files[0]) fd.append('image', $('image').files[0]);
       else return alert('Select a capture or upload a photo');
 

@@ -35,6 +35,7 @@ export const MATCH_THRESHOLD = Number(process.env.MATCH_THRESHOLD || 10);
 // Memo prefixes — the on-chain record format
 export const MEMO_PHOTO = 'fraudbusters:photo:v1';
 export const MEMO_CLAIM = 'fraudbusters:claim:v1';
+export const MEMO_LINK = 'fraudbusters:link:v1';
 
 // Written by `npm run setup`, per RPC (devnet vs sandbox have different mints);
 // PAYOUT_MINT env overrides (e.g. Circle devnet USDC / EURC)

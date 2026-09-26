@@ -2,7 +2,14 @@
 <html lang="en">
 <head>
   <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="theme-color" content="#0b0d12" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="FraudBusters" />
+  <link rel="manifest" href="/manifest.webmanifest" />
+  <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png" />
   <title>Capture evidence · FraudBusters</title>
   <link rel="stylesheet" href="/app.css" />
   <script src="/vendor/nacl-fast.min.js"></script>
@@ -11,7 +18,7 @@
   <main>
     <p class="eyebrow">Step 1 · Capture</p>
     <h1>Capture claim evidence</h1>
-    <p class="lede">Photos can only be taken with the live camera, not uploaded from a gallery. Each photo is signed by this device at the moment of capture and its fingerprint is recorded on Solana.</p>
+    <p class="lede">Three guided shots with the live camera, no gallery uploads. Each photo is signed by this device at the moment of capture and its fingerprint is recorded on Solana.</p>
 
     <div class="two" style="margin-top:24px">
       <div class="card">
@@ -19,12 +26,17 @@
           <h3>Secure connection required</h3>
           <p class="small">Browsers only allow the live camera on secure pages. Open <span class="mono" id="httpsUrl"></span> and accept the certificate notice.</p>
         </div>
-        <button class="btn block" id="start" type="button">Open camera</button>
-        <div id="camBox" hidden>
+        <ol class="shots" id="shots"></ol>
+        <button class="btn block" id="start" type="button">Start guided capture</button>
+        <div id="camBox" class="cam" hidden>
+          <p class="prompt" id="prompt"></p>
           <video id="video" class="preview" autoplay playsinline muted></video>
-          <div class="shutterbar"><button class="shutter" id="snap" type="button" aria-label="Take photo"></button></div>
+          <p class="cammsg" id="camMsg" aria-live="polite"></p>
+          <div class="shutterbar">
+            <button class="shutter" id="snap" type="button" aria-label="Take photo"></button>
+            <button class="camclose" id="camClose" type="button" aria-label="Stop capture">✕</button>
+          </div>
         </div>
-        <img id="preview" class="preview" hidden alt="Captured photo" />
         <div id="result"></div>
       </div>
 
@@ -42,13 +54,22 @@
   </main>
 
   <script type="module">
-    import { nav, deviceAddress, signPhoto, post, setStep, degradedCopy, esc, fmtTime } from '/device.js';
+    import { nav, deviceAddress, signPhoto, post, setStep, degradedCopy, esc } from '/device.js';
     nav('/capture.html', 'claimant');
     const $ = (id) => document.getElementById(id);
     $('addr').textContent = deviceAddress();
     const steps = $('steps');
     let stream = null;
-    let lastBlob = null;
+    let set = null; // { set, side, shots }
+    let current = 0;
+    let busy = false;
+    const taken = {}; // shot -> { photo, blob }
+
+    const GUIDE = {
+      wide: () => ['Wide shot', 'Step back until the whole vehicle or item is in frame.'],
+      close: () => ['Close-up', 'Move in close on the damage and fill the frame with it.'],
+      angle: (side) => [`From the ${side}`, `Walk to the <b>${side.toUpperCase()}</b> of the damage and shoot it again from there.`],
+    };
 
     if (!window.isSecureContext || !navigator.mediaDevices?.getUserMedia) {
       $('insecure').hidden = false;
@@ -56,48 +77,97 @@
       $('start').hidden = true;
     }
 
+    function renderShots() {
+      if (!set) return ($('shots').innerHTML = '');
+      $('shots').innerHTML = set.shots
+        .map((shot, i) => {
+          const [title, hint] = GUIDE[shot](set.side);
+          const t = taken[shot];
+          const state = t ? 'done' : i === current ? 'active' : '';
+          return `<li class="${state}">
+            ${t ? `<img src="${URL.createObjectURL(t.blob)}" alt="${esc(title)}" />` : `<span class="n">${i + 1}</span>`}
+            <div><b>${esc(title)}</b><div class="small muted">${t ? `Recorded · <a href="${esc(t.photo.explorer)}" target="_blank" rel="noopener">Solana record</a>` : hint}</div></div>
+          </li>`;
+        })
+        .join('');
+      const shot = set.shots[current];
+      if (shot) $('prompt').innerHTML = `<b>${current + 1}/3 · ${esc(GUIDE[shot](set.side)[0])}</b> ${GUIDE[shot](set.side)[1]}`;
+    }
+
     async function openCamera() {
+      stream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: { ideal: 'environment' }, width: { ideal: 1920 }, height: { ideal: 1080 } },
+        audio: false,
+      });
+      $('video').srcObject = stream;
+      $('camBox').hidden = false;
+    }
+
+    async function start() {
+      $('result').innerHTML = '';
+      [...steps.children].forEach((li) => (li.className = ''));
       try {
-        stream = await navigator.mediaDevices.getUserMedia({
-          video: { facingMode: { ideal: 'environment' }, width: { ideal: 1920 }, height: { ideal: 1080 } },
-          audio: false,
-        });
-        $('video').srcObject = stream;
-        $('camBox').hidden = false;
+        set = await fetch('/api/capture-set').then((r) => r.json());
+        current = 0;
+        for (const k of Object.keys(taken)) delete taken[k];
+        renderShots();
+        $('camMsg').textContent = '';
+        await openCamera();
         $('start').hidden = true;
-        $('preview').hidden = true;
-        $('result').innerHTML = '';
-        [...steps.children].forEach((li) => (li.className = ''));
       } catch (e) {
         $('result').innerHTML = `<div class="status flagged"><h3>Camera unavailable</h3><p class="small">${esc(e.message)}</p></div>`;
       }
     }
-    $('start').onclick = openCamera;
-
-    $('snap').onclick = async () => {
-      setStep(steps, 0, 'active');
-      let challenge;
-      try {
-        ({ challenge } = await fetch('/api/challenge').then((r) => r.json()));
-      } catch (e) {
-        setStep(steps, 0, 'fail');
-        return;
-      }
-      setStep(steps, 0, 'done');
-
-      const v = $('video');
-      const c = document.createElement('canvas');
-      c.width = v.videoWidth;
-      c.height = v.videoHeight;
-      c.getContext('2d').drawImage(v, 0, 0);
+    $('start').onclick = start;
+    $('camClose').onclick = () => {
       stream?.getTracks().forEach((t) => t.stop());
       $('camBox').hidden = true;
-      const blob = await new Promise((r) => c.toBlob(r, 'image/jpeg', 0.92));
-      lastBlob = blob;
-      $('preview').src = URL.createObjectURL(blob);
-      $('preview').hidden = false;
+      $('start').hidden = false;
+    };
 
+    function finish() {
+      stream?.getTracks().forEach((t) => t.stop());
+      $('camBox').hidden = true;
+      $('result').innerHTML = `
+        <div class="status verified">
+          <h3>Evidence set recorded</h3>
+          <p class="small">Three live shots, each signed by this device and anchored on Solana.</p>
+        </div>
+        <div class="row" style="margin-top:14px">
+          <a class="btn" href="/claim.html?set=${set.set}">Submit a claim with these photos</a>
+          <button class="btn secondary" id="again" type="button">Start over</button>
+          <button class="btn secondary" id="dl" type="button">Download compressed copy</button>
+        </div>`;
+      $('again').onclick = start;
+      $('dl').onclick = async () => {
+        const copy = await degradedCopy(taken.close.blob);
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(copy);
+        a.download = `fraudbusters-compressed-${taken.close.photo.id}.jpg`;
+        a.click();
+      };
+    }
+
+    $('snap').onclick = async () => {
+      if (busy || !set) return;
+      busy = true;
+      $('snap').disabled = true;
+      const shot = set.shots[current];
+      [...steps.children].forEach((li) => (li.className = ''));
+      $('result').innerHTML = '';
+      $('camMsg').textContent = 'Signing and recording on Solana…';
       try {
+        setStep(steps, 0, 'active');
+        const { challenge } = await fetch('/api/challenge').then((r) => r.json());
+        setStep(steps, 0, 'done');
+
+        const v = $('video');
+        const c = document.createElement('canvas');
+        c.width = v.videoWidth;
+        c.height = v.videoHeight;
+        c.getContext('2d').drawImage(v, 0, 0);
+        const blob = await new Promise((r) => c.toBlob(r, 'image/jpeg', 0.92));
+
         setStep(steps, 1, 'active');
         const signed = await signPhoto(blob, challenge);
         setStep(steps, 1, 'done');
@@ -107,32 +177,29 @@
         fd.append('pubkey', signed.pubkey);
         fd.append('signature', signed.signature);
         fd.append('challenge', challenge);
+        fd.append('set', set.set);
+        fd.append('shot', shot);
         const { photo } = await post('/api/register', fd);
         setStep(steps, 2, 'done');
-        $('result').innerHTML = `
-          <div class="status verified">
-            <h3>Evidence recorded</h3>
-            <p class="small">Captured ${fmtTime(photo.capturedAt)} · <a href="${photo.explorer}" target="_blank" rel="noopener">View Solana record</a></p>
-          </div>
-          <div class="row" style="margin-top:14px">
-            <a class="btn" href="/claim.html?photo=${photo.id}">Submit a claim with this photo</a>
-            <button class="btn secondary" id="again" type="button">Retake</button>
-            <button class="btn secondary" id="dl" type="button">Download compressed copy</button>
-          </div>`;
-        $('again').onclick = openCamera;
-        $('dl').onclick = async () => {
-          const copy = await degradedCopy(lastBlob);
-          const a = document.createElement('a');
-          a.href = URL.createObjectURL(copy);
-          a.download = `fraudbusters-compressed-${photo.id}.jpg`;
-          a.click();
-        };
+        taken[shot] = { photo, blob };
+        $('camMsg').textContent = `✓ ${GUIDE[shot](set.side)[0]} recorded`;
+        current++;
+        renderShots();
+        if (current >= set.shots.length) finish();
       } catch (e) {
         const i = [...steps.children].findIndex((li) => li.className === 'active');
         setStep(steps, i < 0 ? 2 : i, 'fail');
-        $('result').innerHTML = `<div class="status flagged"><h3>Could not record</h3><p class="small">${esc(e.message)}</p></div>
-          <button class="btn secondary" id="retry" type="button" style="margin-top:12px">Try again</button>`;
-        $('retry').onclick = openCamera;
+        $('camMsg').textContent = `${e.message}. Retake, or tap ✕ to stop.`;
+        $('result').innerHTML = `<div class="status flagged"><h3>Could not record this shot</h3><p class="small">${esc(e.message)}</p></div>
+          <p class="small muted" style="margin:10px 0 0">Retake this shot, or <a href="#" id="restart">start over</a>.</p>`;
+        $('restart').onclick = (ev) => {
+          ev.preventDefault();
+          stream?.getTracks().forEach((t) => t.stop());
+          start();
+        };
+      } finally {
+        busy = false;
+        $('snap').disabled = false;
       }
     };
   </script>

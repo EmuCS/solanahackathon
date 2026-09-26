@@ -31,7 +31,7 @@ a { color: var(--blue); text-decoration: none; }
 a:hover { text-decoration: underline; }
 
 /* Header */
-.topbar { background: var(--ink); color: #fff; }
+.topbar { background: var(--ink); color: #fff; padding: env(safe-area-inset-top) env(safe-area-inset-right) 0 env(safe-area-inset-left); }
 .topbar .inner {
   max-width: 1080px; margin: 0 auto; padding: 0 20px; height: 56px;
   display: flex; align-items: center; gap: 28px;
@@ -111,7 +111,17 @@ details summary { cursor: pointer; color: var(--muted); font-size: 13px; margin-
 .badge.review { background: var(--subtle); color: var(--ink-2); border: 1px solid var(--line); }
 .badge.flagged { background: var(--red-bg); color: var(--red); }
 .badge.paid { background: var(--ink); color: #fff; }
+.badge.offered { background: var(--amber-bg); color: var(--amber); }
 .badge.rejected { background: var(--subtle); color: var(--muted); text-decoration: line-through; }
+.badge.sev-none, .badge.sev-minor { background: var(--subtle); color: var(--ink-2); border: 1px solid var(--line); }
+.badge.sev-moderate { background: var(--amber-bg); color: var(--amber); }
+.badge.sev-severe { background: var(--red-bg); color: var(--red); }
+
+/* Damaged parts (AI assessment) */
+.parts { width: 100%; border-collapse: collapse; font-size: 13.5px; margin: 4px 0 12px; }
+.parts th { text-align: left; font-size: 11.5px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; padding: 0 8px 6px 0; }
+.parts td { border-top: 1px solid var(--line); padding: 8px 8px 8px 0; vertical-align: top; }
+.parts td:last-child, .parts th:last-child { padding-right: 0; text-align: right; }
 
 /* Status panel */
 .status { border: 1px solid var(--line); border-left: 3px solid var(--ink); border-radius: 8px; padding: 14px 16px; margin-top: 16px; }
@@ -119,6 +129,7 @@ details summary { cursor: pointer; color: var(--muted); font-size: 13px; margin-
 .status.flagged { border-left-color: var(--red); background: var(--red-bg); border-color: #f5d2ce; }
 .status.review { border-left-color: var(--muted); background: var(--subtle); }
 .status.paid { border-left-color: var(--ink); }
+.status.offered { border-left-color: var(--amber); background: var(--amber-bg); border-color: #f3e2bd; }
 .status h3 { font-size: 16px; }
 .status p { margin: 4px 0 0; }
 
@@ -154,6 +165,37 @@ video.preview { background: #000; max-height: 60vh; }
 .shutterbar { display: flex; justify-content: center; padding: 16px 0 4px; }
 .shutter { width: 64px; height: 64px; border-radius: 50%; background: #fff; border: 4px solid var(--ink); box-shadow: 0 0 0 3px #fff inset; cursor: pointer; }
 .shutter:active { transform: scale(.96); }
+/* Guided capture: shot list + live prompt */
+.shots { list-style: none; padding: 0; margin: 0 0 16px; }
+.shots li { display: grid; grid-template-columns: 48px 1fr; gap: 12px; align-items: center; padding: 8px 0; border-top: 1px solid var(--line); color: var(--muted); }
+.shots li:first-child { border-top: 0; }
+.shots li.active, .shots li.done { color: var(--ink); }
+.shots .n { width: 48px; height: 48px; border-radius: 8px; border: 1.5px dashed var(--line); display: grid; place-items: center; font-weight: 600; }
+.shots li.active .n { border: 1.5px solid var(--blue); color: var(--blue); background: var(--blue-bg); }
+.shots img { width: 48px; height: 48px; object-fit: cover; border-radius: 8px; display: block; }
+.shots b { font-weight: 600; font-size: 14px; }
+.prompt { margin: 0 0 10px; padding: 10px 12px; border-radius: 8px; background: var(--blue-bg); color: var(--blue-ink); font-size: 14px; }
+.cammsg { margin: 8px 0 0; font-size: 13px; color: var(--muted); min-height: 1.2em; text-align: center; }
+.shutterbar { position: relative; }
+.camclose { position: absolute; right: 0; top: 50%; transform: translateY(-50%); width: 40px; height: 40px; border-radius: 50%; border: 1px solid var(--line); background: var(--bg); color: var(--ink); font-size: 16px; cursor: pointer; }
+/* Phones: the camera takes the whole screen so the shutter is always under the thumb */
+@media (max-width: 720px) {
+  .cam:not([hidden]) {
+    position: fixed; inset: 0; z-index: 50; background: #000; display: flex; flex-direction: column;
+    padding: env(safe-area-inset-top) 0 env(safe-area-inset-bottom);
+  }
+  .cam .prompt { margin: 12px 12px 8px; }
+  .cam video.preview { flex: 1; min-height: 0; max-height: none; width: 100%; object-fit: contain; border-radius: 0; }
+  .cam .cammsg { color: #cfd4dc; padding: 0 16px; }
+  .cam .shutterbar { padding: 14px 0 22px; }
+  .cam .shutter { border-color: #fff; box-shadow: 0 0 0 3px #000 inset; }
+  .cam .camclose { right: 24px; background: transparent; border-color: #555; color: #fff; }
+}
+.shotstrip { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-top: 10px; }
+.shotstrip figure { margin: 0; }
+.shotstrip img { width: 100%; aspect-ratio: 4 / 3; object-fit: cover; border-radius: 6px; display: block; background: var(--subtle); }
+.shotstrip figcaption { font-size: 12px; color: var(--muted); margin-top: 4px; }
+.picker .tag { display: block; font-size: 11px; color: var(--muted); padding: 3px 0 0; }
 .thumbs { display: grid; gap: 8px; grid-template-columns: repeat(auto-fill, minmax(92px, 1fr)); }
 .thumbs img { width: 100%; aspect-ratio: 1; object-fit: cover; border-radius: 6px; display: block; }
 .picker { display: grid; gap: 8px; grid-template-columns: repeat(auto-fill, minmax(84px, 1fr)); }
@@ -187,3 +229,7 @@ tr.click:hover td { background: var(--subtle); }
 .how .card { position: relative; padding-top: 44px; }
 .how .card::before { counter-increment: h; content: "0" counter(h); position: absolute; top: 18px; left: 20px; font-size: 12px; font-weight: 600; color: var(--blue); letter-spacing: .06em; }
 .notice { font-size: 13px; color: var(--muted); border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; background: var(--subtle); }
+
+/* Adjuster wallet bar */
+.walletbar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; margin-top: 14px; padding: 10px 12px; border: 1px dashed var(--line); border-radius: 8px; }
+.walletbar .btn { padding: 6px 12px; font-size: 13px; }
