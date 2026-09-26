@@ -83,13 +83,15 @@ Competing insurers will never put their claims evidence into a database a rival 
 | **Wallet sign-off** | Every approve, offer or reject is signed by the adjuster's Phantom / Solflare wallet; the wallet address and signature go into the decision memo | [`POST /api/claims/:id/decision`](src/server.js), [`public/wallet.js`](public/wallet.js) |
 | **Payout wallet** | Claimants link their own Phantom / Solflare wallet (signed by both the phone and the wallet), recorded as a memo | [`/api/link/*`](src/server.js), [`public/profile.html`](public/profile.html) |
 | **Settlement** | Stablecoin transfer and decision memo in one atomic transaction | [`payout()`](src/solana.js) |
-| **Pay-per-check API** | Verification endpoint behind a Pay.sh gateway: $0.01 USDC per request over HTTP 402, no account or API key | [`paywall.yml`](paywall.yml), [`src/payClient.js`](src/payClient.js) |
+| **Pay-per-check API** | Verification endpoint behind a Pay.sh gateway: $0.01 USDC per request over HTTP 402, no account or API key (see [How we use Pay.sh](#how-we-use-paysh)) | [`paywall.yml`](paywall.yml), [`src/payClient.js`](src/payClient.js) |
 
 Photos never go on-chain; only fingerprints and signatures do. The local index is a cache that can be rebuilt from the chain alone.
 
 ### On-chain proof
 
-Real transactions written by today's build (Solana test network run by Pay.sh; the explorer links open it as a custom cluster):
+**Which network:** the demo runs on the Solana test network from Pay.sh's sandbox (`402.surfnet.dev`), with free test SOL and a test stablecoin (tUSDC). Solana's public devnet was rate-limiting requests at the venue; the same code runs on devnet by setting `RPC_URL`.
+
+Real transactions written by today's build (the explorer links open the test network as a custom cluster):
 
 | What | Transaction | Memo |
 |---|---|---|
@@ -98,6 +100,17 @@ Real transactions written by today's build (Solana test network run by Pay.sh; t
 | Payout wallet linked from an iPhone with Phantom | [Y5MeP7a8…](https://explorer.solana.com/tx/Y5MeP7a83RS7GAzifQjCg64bAhe6X37PfAuyC5EjYrqEaULX9TXSpudEKhLcNcrenvxkavsb77UPQ2gswZNx3ZP?cluster=custom&customUrl=https%3A%2F%2F402.surfnet.dev%3A8899) | `fraudbusters:link:v1` · device · wallet · wallet signature |
 | Adjuster decision signed in Phantom | [2UJDPJef…](https://explorer.solana.com/tx/2UJDPJefatQpZSCbQ5CotMATdvs6wyN7YighWJ5SazLtgVc63coom5JqxwQ2ksS8S6VoP6jyF3ReoTWas2Nb9Wmz?cluster=custom&customUrl=https%3A%2F%2F402.surfnet.dev%3A8899) | `fraudbusters:claim:v1` · decision · adjuster wallet · adjuster signature |
 | Stablecoin payout (700 tUSDC after an accepted offer) | [33emXq6i…](https://explorer.solana.com/tx/33emXq6iA3HE3cZ7Wqd3bVdBRJ2CRu5F3S1k1wmrMkqjFYQ772BWo9jTSiMboeehywnAT9snm1EnaNg4LyMNNvE6?cluster=custom&customUrl=https%3A%2F%2F402.surfnet.dev%3A8899) | token transfer + `fraudbusters:claim:v1` · paid |
+
+## How we use Pay.sh
+
+Verification is sold per check instead of per contract: any insurer's claims agent can buy one, with no account, sign-up or API key.
+
+1. Our verifier (`POST /v1/verify`: was this photo captured live in FraudBusters, and has it been claimed before?) sits behind a **Pay.sh gateway** ([`paywall.yml`](paywall.yml)) priced at **$0.01 per check**.
+2. When a claim comes in, the insurer's agent calls the verifier with the `pay` CLI. The gateway answers **HTTP 402 Payment Required**, the agent's wallet pays in USDC, the request is retried, and the gateway forwards it and returns the result ([`src/payClient.js`](src/payClient.js)).
+3. The payment (price, network, time) is attached to the claim file, so the insurer sees what every verification cost.
+4. The same agent can buy other services from the Pay.sh catalog the same way. We wired up Google Cloud Vision reverse image search for photos uploaded from outside the app; it is optional and **off in the demo**, because it needs a mainnet account and an approval per payment.
+
+In the demo, Pay.sh runs in **sandbox mode** with test USDC: the payment flow is real, but no real money moves.
 
 ## Architecture
 
@@ -150,7 +163,7 @@ flowchart LR
 - Triaged queue (verified, standard review, flagged) with a reason for every finding
 - AI damage assessment: each damaged part with damage type and severity (minor / moderate / severe), plus a repair range
 - Evidence checks: capture record, integrity (SHA-512), live capture, claimant = capturing device, three-shot set (same device, distinct shots, one session), same object in every shot, real scene vs screen or print, reuse across insurers (every shot), claimant history, photo vs description, amount vs estimated repair cost, AI-generation labels (C2PA / IPTC / generator metadata)
-- Upload tier for photos taken elsewhere: metadata signals and reverse image search via Google Cloud Vision, paid per request through the Pay.sh catalog
+- Upload tier for photos taken elsewhere: metadata signals, plus optional reverse image search via Google Cloud Vision bought per request through the Pay.sh catalog (off in the demo)
 - Pay the full amount, send a lower offer with a note, or reject; every decision is signed with the adjuster's wallet and recorded on Solana
 
 **Engineering details**
