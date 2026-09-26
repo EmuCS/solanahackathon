@@ -197,6 +197,20 @@ const ROLES = {
   },
 };
 
+// Phone tab bar for the claimant app (shown by CSS on small screens only)
+const TAB_ICON = {
+  capture: '<path d="M4 8.5A2.5 2.5 0 0 1 6.5 6h1.4l1.3-2h5.6l1.3 2h1.4A2.5 2.5 0 0 1 20 8.5v9a2.5 2.5 0 0 1-2.5 2.5h-11A2.5 2.5 0 0 1 4 17.5z"/><circle cx="12" cy="13" r="3.5"/>',
+  claim: '<path d="M7 3h7l5 5v11.5A1.5 1.5 0 0 1 17.5 21h-11A1.5 1.5 0 0 1 5 19.5v-15A1.5 1.5 0 0 1 6.5 3z"/><path d="M14 3v5h5M12 11.5v6M9 14.5h6"/>',
+  claims: '<rect x="4" y="4" width="16" height="16" rx="2.5"/><path d="M8 9h8M8 12.5h8M8 16h5"/>',
+  profile: '<circle cx="12" cy="8.5" r="3.5"/><path d="M5 20c.8-3.6 3.6-5.5 7-5.5s6.2 1.9 7 5.5"/>',
+};
+const TABS = [
+  ['/capture.html', 'Capture', 'capture'],
+  ['/claim.html', 'Claim', 'claim'],
+  ['/my-claims.html', 'My claims', 'claims'],
+  ['/profile.html', 'Profile', 'profile'],
+];
+
 export function nav(active, role = 'public') {
   if (!document.querySelector('link[rel=icon]')) {
     document.head.insertAdjacentHTML('beforeend', '<link rel="icon" type="image/svg+xml" href="/logo.svg" />');
@@ -211,6 +225,15 @@ export function nav(active, role = 'public') {
       <span class="env role-${role}">${r.label}</span>
     </div></header>`,
   );
+  if (role === 'claimant') {
+    document.body.insertAdjacentHTML(
+      'beforeend',
+      `<nav class="tabbar" aria-label="Claimant app">${TABS.map(
+        ([h, t, i]) => `<a href="${h}"${h === active ? ' class="active" aria-current="page"' : ''}>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${TAB_ICON[i]}</svg>${t}</a>`,
+      ).join('')}</nav>`,
+    );
+  }
 }
 
 // Claimant-facing statuses (never the fraud signals)

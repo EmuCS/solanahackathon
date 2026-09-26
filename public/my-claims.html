@@ -15,21 +15,16 @@
   <script src="/vendor/nacl-fast.min.js"></script>
 </head>
 <body>
-  <main>
+  <main style="max-width:760px">
     <p class="eyebrow">Claimant app</p>
     <h1>My claims</h1>
-    <div class="card subtle" style="margin-top:20px">
+    <div class="card walletcard" style="margin-top:18px">
       <p class="muted small" style="margin:0">Payments received</p>
-      <div style="font-size:32px;font-weight:700;letter-spacing:-.02em" class="num" id="balance">—</div>
-      <div id="wallet" style="margin-top:14px;padding-top:14px;border-top:1px solid var(--line)"></div>
+      <p class="amount" id="balance">—</p>
+      <div class="sep" id="wallet"></div>
     </div>
     <div id="offers"></div>
-    <div class="table-wrap" style="margin-top:16px">
-      <table>
-        <thead><tr><th>Status</th><th>Claim</th><th>Amount</th><th>Submitted</th><th></th></tr></thead>
-        <tbody id="rows"><tr><td colspan="5" class="muted">Loading…</td></tr></tbody>
-      </table>
-    </div>
+    <div class="claimlist" id="rows"><div class="empty">Loading…</div></div>
   </main>
 
   <script type="module">
@@ -49,19 +44,22 @@
         fetch(`/api/balance/${payTo}`).then((r) => r.json()),
       ]);
       if (seq !== loadSeq) return; // a newer refresh started meanwhile: never redraw with older data
-      $('balance').textContent = `${b.amount.toLocaleString('en-IE', { minimumFractionDigits: 2 })} ${b.symbol}`;
+      $('balance').innerHTML = `${b.amount.toLocaleString('en-IE', { minimumFractionDigits: 2 })}<small>${esc(b.symbol)}</small>`;
       $('rows').innerHTML = list.length
         ? list
             .map(
-              (c) => `<tr>
-                <td>${claimantBadge(c.status)}</td>
-                <td><b>${esc(c.description || 'Claim')}</b><div class="muted small">${esc(c.insurerName)} · <span class="mono">${esc(c.id)}</span></div></td>
-                <td class="num">${eur(c.amount)}${c.paidAmount != null && c.paidAmount !== c.amount ? `<div class="muted small">${eur(c.paidAmount)} paid</div>` : ''}</td>
-                <td class="muted small">${fmtTime(c.createdAt)}</td>
-                <td class="small">${c.paymentExplorer ? `<a href="${c.paymentExplorer}" target="_blank" rel="noopener">Payment record</a>` : ''}</td></tr>`,
+              (c) => `<div class="claimitem">
+                <img src="${esc(c.image)}" alt="" loading="lazy" />
+                <div>
+                  <b>${esc(c.description || 'Claim')}</b>
+                  <div class="meta">${esc(c.insurerName)} · ${fmtTime(c.createdAt)}</div>
+                  ${c.paymentExplorer ? `<div class="meta"><a href="${esc(c.paymentExplorer)}" target="_blank" rel="noopener">Payment on Solana</a></div>` : ''}
+                </div>
+                <div class="amt">${eur(c.paidAmount ?? c.amount)}${c.paidAmount != null && c.paidAmount !== c.amount ? `<small>of ${eur(c.amount)}</small>` : ''}<div>${claimantBadge(c.status)}</div></div>
+              </div>`,
             )
             .join('')
-        : `<tr><td colspan="5" class="muted">No claims yet. <a href="/capture.html">Capture evidence</a> to start one.</td></tr>`;
+        : '<div class="empty">No claims yet.<br><a href="/capture.html">Capture evidence</a> to start one.</div>';
       renderOffers(list.filter((c) => c.offer));
     }
 

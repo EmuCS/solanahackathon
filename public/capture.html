@@ -17,8 +17,8 @@
 <body>
   <main>
     <p class="eyebrow">Step 1 · Capture</p>
-    <h1>Capture claim evidence</h1>
-    <p class="lede">Three guided shots with the live camera, no gallery uploads. Each photo is signed by this device at the moment of capture and its fingerprint is recorded on Solana.</p>
+    <h1>Capture evidence</h1>
+    <p class="lede">Three quick photos with the live camera. We guide you through each one.</p>
 
     <div class="two" style="margin-top:24px">
       <div class="card">
@@ -41,9 +41,8 @@
       </div>
 
       <div class="card subtle">
-        <h3>Device</h3>
-        <p class="mono" id="addr" style="margin:0 0 4px"></p>
-        <p class="muted small" style="margin:0">This device’s key signs every capture. The same address receives approved claim payments.</p>
+        <h3>How your photos are protected</h3>
+        <p class="muted small" style="margin:0">Each shot is signed by this phone the moment you take it and recorded on Solana, so nobody can swap or edit it later.</p>
         <ol class="steps" id="steps">
           <li>One-time challenge from server</li>
           <li>Fingerprint (SHA-512) and device signature</li>
@@ -57,7 +56,6 @@
     import { nav, deviceAddress, signPhoto, post, setStep, degradedCopy, esc } from '/device.js';
     nav('/capture.html', 'claimant');
     const $ = (id) => document.getElementById(id);
-    $('addr').textContent = deviceAddress();
     const steps = $('steps');
     let stream = null;
     let set = null; // { set, side, shots }
@@ -68,7 +66,10 @@
     const GUIDE = {
       wide: () => ['Wide shot', 'Step back until the whole vehicle or item is in frame.'],
       close: () => ['Close-up', 'Move in close on the damage and fill the frame with it.'],
-      angle: (side) => [`From the ${side}`, `Walk to the <b>${side.toUpperCase()}</b> of the damage and shoot it again from there.`],
+      angle: (side) =>
+        side
+          ? [`From the ${side}`, `Walk to the <b>${side.toUpperCase()}</b> of the damage and shoot it again from there.`]
+          : ['From one side', 'We pick left or right at random when you get there.'],
     };
 
     if (!window.isSecureContext || !navigator.mediaDevices?.getUserMedia) {
@@ -78,19 +79,20 @@
     }
 
     function renderShots() {
-      if (!set) return ($('shots').innerHTML = '');
-      $('shots').innerHTML = set.shots
+      // Before starting, preview the three shots (the side is only revealed once a set starts)
+      const plan = set || { shots: ['wide', 'close', 'angle'], side: null };
+      $('shots').innerHTML = plan.shots
         .map((shot, i) => {
-          const [title, hint] = GUIDE[shot](set.side);
+          const [title, hint] = GUIDE[shot](plan.side);
           const t = taken[shot];
-          const state = t ? 'done' : i === current ? 'active' : '';
+          const state = t ? 'done' : set && i === current ? 'active' : '';
           return `<li class="${state}">
             ${t ? `<img src="${URL.createObjectURL(t.blob)}" alt="${esc(title)}" />` : `<span class="n">${i + 1}</span>`}
             <div><b>${esc(title)}</b><div class="small muted">${t ? `Recorded · <a href="${esc(t.photo.explorer)}" target="_blank" rel="noopener">Solana record</a>` : hint}</div></div>
           </li>`;
         })
         .join('');
-      const shot = set.shots[current];
+      const shot = set?.shots[current];
       if (shot) $('prompt').innerHTML = `<b>${current + 1}/3 · ${esc(GUIDE[shot](set.side)[0])}</b> ${GUIDE[shot](set.side)[1]}`;
     }
 
@@ -119,6 +121,7 @@
       }
     }
     $('start').onclick = start;
+    renderShots();
     $('camClose').onclick = () => {
       stream?.getTracks().forEach((t) => t.stop());
       $('camBox').hidden = true;

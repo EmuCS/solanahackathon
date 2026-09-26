@@ -18,35 +18,35 @@
   <main>
     <p class="eyebrow">Claimant app</p>
     <h1>Submit a claim</h1>
-    <p class="lede">Attach evidence you captured in the app. Your insurer reviews every claim; once approved, the payment reaches this device within seconds.</p>
+    <p class="lede">Your insurer reviews every claim. Once approved, the payment reaches you within seconds.</p>
 
     <div class="two" style="margin-top:24px">
       <form class="card" id="form">
-        <label for="insurer" style="margin-top:0">Insurer</label>
-        <select id="insurer"></select>
-        <label for="amount">Amount claimed (EUR)</label>
-        <input id="amount" type="number" min="1" max="10000" step="0.01" value="450" required />
-        <label for="description">What happened?</label>
-        <input id="description" value="Dent on rear door, car park, Grand Canal Dock" />
-
-        <label>Evidence</label>
+        <label style="margin-top:0">1 · Evidence</label>
         <div class="picker" id="picker"><span class="muted small">No captures on this device yet. <a href="/capture.html">Capture evidence</a></span></div>
+        <div class="shotstrip" id="strip"></div>
+        <img id="preview" class="preview" hidden style="margin-top:14px" alt="Selected evidence" />
         <details>
           <summary>Upload a photo taken elsewhere (slower review)</summary>
           <input id="image" type="file" accept="image/*" style="margin-top:8px" />
         </details>
-        <div class="shotstrip" id="strip"></div>
-        <img id="preview" class="preview" hidden style="margin-top:14px" alt="Selected evidence" />
-        <button class="btn block" id="submit" style="margin-top:18px">Submit claim</button>
+
+        <label for="description">2 · What happened?</label>
+        <textarea id="description" rows="3" maxlength="280" placeholder="e.g. Phone slipped off the desk, screen cracked in the top corner" required></textarea>
+        <label for="amount">3 · Amount claimed</label>
+        <div class="money"><span>€</span><input id="amount" type="number" inputmode="decimal" min="1" max="10000" step="0.01" placeholder="0.00" required /></div>
+        <label for="insurer">4 · Insurer</label>
+        <select id="insurer"></select>
+        <button class="btn block" id="submit" style="margin-top:20px">Submit claim</button>
       </form>
 
       <div>
-        <div class="card subtle">
+        <div class="card" id="result" hidden style="margin-bottom:14px"></div>
+        <div class="card walletcard">
           <p class="muted small" style="margin:0">Payments received</p>
-          <div style="font-size:28px;font-weight:700;letter-spacing:-.02em" class="num" id="balance">—</div>
-          <div id="wallet" style="margin-top:14px;padding-top:14px;border-top:1px solid var(--line)"></div>
+          <p class="amount" id="balance">—</p>
+          <div class="sep" id="wallet"></div>
         </div>
-        <div class="card" id="result" hidden style="margin-top:16px"></div>
       </div>
     </div>
   </main>
@@ -65,7 +65,7 @@
 
     async function refreshBalance() {
       const b = await fetch(`/api/balance/${payTo}`).then((r) => r.json());
-      $('balance').textContent = `${b.amount.toLocaleString('en-IE', { minimumFractionDigits: 2 })} ${b.symbol}`;
+      $('balance').innerHTML = `${b.amount.toLocaleString('en-IE', { minimumFractionDigits: 2 })}<small>${esc(b.symbol)}</small>`;
     }
     refreshBalance();
     setInterval(refreshBalance, 5000);
@@ -131,6 +131,7 @@
       $('submit').disabled = true;
       $('submit').textContent = 'Submitting…';
       $('result').hidden = false;
+      $('result').scrollIntoView({ behavior: 'smooth', block: 'center' });
       $('result').innerHTML = '<p class="muted" style="margin:0">Sending your claim and evidence to your insurer…</p>';
       try {
         const { receipt: r } = await post('/api/claims', fd);
