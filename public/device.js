@@ -228,10 +228,12 @@ export function nav(active, role = 'public') {
   if (role === 'claimant') {
     document.body.insertAdjacentHTML(
       'beforeend',
-      `<nav class="tabbar" aria-label="Claimant app">${TABS.map(
+      `<nav class="tabbar" aria-label="Claimant app">
+        <a class="tb-brand" href="/">${LOGOS[currentLogo()]('fb-tab')}<span>FRAUDBUSTERS</span></a>${TABS.map(
         ([h, t, i]) => `<a href="${h}"${h === active ? ' class="active" aria-current="page"' : ''}>
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${TAB_ICON[i]}</svg>${t}</a>`,
-      ).join('')}</nav>`,
+      ).join('')}
+        <span class="tb-foot">Claimant app · test network</span></nav>`,
     );
   }
 }

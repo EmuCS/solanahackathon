@@ -23,6 +23,12 @@
 
 ---
 
+| | |
+|---|---|
+| **Live demo** | https://faces-pioneer-fate-day.trycloudflare.com (claimant app: [`/capture.html`](https://faces-pioneer-fate-day.trycloudflare.com/capture.html), insurer portal: [`/adjuster.html`](https://faces-pioneer-fate-day.trycloudflare.com/adjuster.html)). Served from our laptop during the event, so it is only up while that runs. |
+| **Code** | https://github.com/EmuCS/solanahackathon |
+| **On-chain proof** | Real transactions from today's build, listed [below](#on-chain-proof) |
+
 ![FraudBusters overview](docs/screenshots/overview.png)
 
 ## The problem
@@ -35,13 +41,13 @@ FraudBusters doesn't guess whether a photo is fake. It **proves** where a photo 
 
 | | Question | How FraudBusters answers it |
 |---|---|---|
-| 01 | **Is it real?** | Live camera only (no gallery uploads). The phone signs the photo against a one-time server challenge; the fingerprint and signature are anchored on Solana. |
-| 02 | **Is it new?** | The photo is matched against every claim on the shared registry, even after compression, plus the claimant's claim history across *all* insurers. |
-| 03 | **Does it add up?** | Claude reads the photo: does it show what the claim describes, and is the amount plausible for the visible damage? Inflated claims get flagged. |
-| 04 | **Settled?** | The adjuster approves and a stablecoin payment settles in seconds, with the decision recorded in the same Solana transaction. |
+| 01 | **Is it real?** | Live camera only (no gallery uploads), in a guided three-shot set: wide, close-up, and a side the server picks at random. Each shot is signed by the phone against a one-time server challenge and anchored on Solana. Claude checks that all shots show the same object and flags photos of a screen or print. |
+| 02 | **Is it new?** | Every shot is matched against every claim on the shared registry, even after compression, plus the claimant's claim history across *all* insurers. |
+| 03 | **Does it add up?** | Claude lists each damaged part with the type of damage and its severity, checks the photos against the description, and estimates a repair range. Inflated claims get flagged. |
+| 04 | **Settled?** | The adjuster signs the decision with their Phantom or Solflare wallet: pay in full, or send a lower offer the claimant can accept. The stablecoin payment reaches the claimant's wallet in seconds, with the decision recorded on Solana. |
 
 ![Claim file with evidence checks](docs/screenshots/claim-file.png)
-<p align="center"><sub>A claim file in the insurer portal: the same photo was already claimed at another insurer, caught through the shared registry.</sub></p>
+<p align="center"><sub>A claim file in the insurer portal: three-shot evidence set, damaged parts with severity, and a flag because the close-up was already used in an earlier claim.</sub></p>
 
 ## Why Solana
 
@@ -51,10 +57,24 @@ Competing insurers will never put their claims evidence into a database a rival 
 |---|---|---|
 | **Proof of capture** | Memo transaction with SHA-512 + perceptual hash, device public key, ed25519 signature and capture challenge | [`POST /api/register`](src/server.js) |
 | **Shared fraud registry** | Every claim registered as a memo; reuse and claimant history detected across insurers | [`POST /api/claims`](src/server.js), [`scripts/reindex.js`](scripts/reindex.js) |
-| **Settlement** | Stablecoin transfer and decision memo in one atomic transaction on adjuster approval | [`payout()`](src/solana.js) |
+| **Wallet sign-off** | Every approve, offer or reject is signed by the adjuster's Phantom / Solflare wallet; the wallet address and signature go into the decision memo | [`POST /api/claims/:id/decision`](src/server.js), [`public/wallet.js`](public/wallet.js) |
+| **Payout wallet** | Claimants link their own Phantom / Solflare wallet (signed by both the phone and the wallet), recorded as a memo | [`/api/link/*`](src/server.js), [`public/profile.html`](public/profile.html) |
+| **Settlement** | Stablecoin transfer and decision memo in one atomic transaction | [`payout()`](src/solana.js) |
 | **Pay-per-check API** | Verification endpoint behind a Pay.sh gateway: $0.01 USDC per request over HTTP 402, no account or API key | [`paywall.yml`](paywall.yml), [`src/payClient.js`](src/payClient.js) |
 
 Photos never go on-chain; only fingerprints and signatures do. The local index is a cache that can be rebuilt from the chain alone.
+
+### On-chain proof
+
+Real transactions written by today's build (Solana test network run by Pay.sh; the explorer links open it as a custom cluster):
+
+| What | Transaction | Memo |
+|---|---|---|
+| Capture record (wide shot of a three-shot set) | [QQefR5HT…](https://explorer.solana.com/tx/QQefR5HTEG8QiAwZedTXyVZCQ4AYEJ3B5xe6SersTFr7fAdkvxV8HDq7fbHJcrMqau8mVMyvArDRogvVkHucvPS?cluster=custom&customUrl=https%3A%2F%2F402.surfnet.dev%3A8899) | `fraudbusters:photo:v1` · perceptual hash · SHA-512 · device key · signature · challenge · set/shot |
+| Claim registered on the shared registry | [3q5aT2dP…](https://explorer.solana.com/tx/3q5aT2dP7yzoMP4jNaHmvowhxTEJh5p3Bw1hL2nQV2M5Mo2jopgCvxVJkYpXVqeh4rBqsA77d5qg4tgb9sDMSvih?cluster=custom&customUrl=https%3A%2F%2F402.surfnet.dev%3A8899) | `fraudbusters:claim:v1` · hash · insurer · status · amount · claimant |
+| Payout wallet linked from an iPhone with Phantom | [Y5MeP7a8…](https://explorer.solana.com/tx/Y5MeP7a83RS7GAzifQjCg64bAhe6X37PfAuyC5EjYrqEaULX9TXSpudEKhLcNcrenvxkavsb77UPQ2gswZNx3ZP?cluster=custom&customUrl=https%3A%2F%2F402.surfnet.dev%3A8899) | `fraudbusters:link:v1` · device · wallet · wallet signature |
+| Adjuster decision signed in Phantom | [2UJDPJef…](https://explorer.solana.com/tx/2UJDPJefatQpZSCbQ5CotMATdvs6wyN7YighWJ5SazLtgVc63coom5JqxwQ2ksS8S6VoP6jyF3ReoTWas2Nb9Wmz?cluster=custom&customUrl=https%3A%2F%2F402.surfnet.dev%3A8899) | `fraudbusters:claim:v1` · decision · adjuster wallet · adjuster signature |
+| Stablecoin payout (700 tUSDC after an accepted offer) | [33emXq6i…](https://explorer.solana.com/tx/33emXq6iA3HE3cZ7Wqd3bVdBRJ2CRu5F3S1k1wmrMkqjFYQ772BWo9jTSiMboeehywnAT9snm1EnaNg4LyMNNvE6?cluster=custom&customUrl=https%3A%2F%2F402.surfnet.dev%3A8899) | token transfer + `fraudbusters:claim:v1` · paid |
 
 ## Architecture
 
@@ -74,6 +94,8 @@ flowchart LR
   end
   GW[Pay.sh gateway<br/>$0.01 per check]
   PORTAL["Insurer portal<br/>(adjuster)"]
+  W1[Adjuster wallet<br/>Phantom / Solflare]
+  W2[Claimant wallet<br/>Phantom / Solflare]
 
   SIGN --> REG --> MEMO
   SIGN -- claim --> ASSESS
@@ -81,29 +103,38 @@ flowchart LR
   ASSESS --> AI
   ASSESS --> MEMO
   ASSESS --> PORTAL
-  PORTAL -- approve --> PAY
+  W1 -- signs decision --> PORTAL
+  PORTAL -- approve / accepted offer --> PAY
+  PAY --> W2
 ```
 
 ## Features
 
-**Claimant app**
-- Live-camera-only capture with a server challenge, so photos can't be pre-made or picked from the gallery
-- On-device ed25519 key: the same address that signs the evidence receives the payout
-- Claims with status-only receipts: fraud signals are never shown to claimants
-- Live claim tracking; approved payments arrive within seconds
+**Claimant app** (installable on iPhone and iPad from the browser: Share → Add to Home Screen)
+- Guided three-shot capture (wide, close-up, random left/right side), live camera only, full-screen on phones and tablets
+- Each shot signed on the device against a one-time server challenge and anchored on Solana
+- Connect Phantom or Solflare in Profile to receive payments in your own wallet (works on iPhone via the wallet app's browser)
+- Offers from the insurer arrive in My claims; accepting is signed by the device and pays out in seconds
+- Status-only receipts: fraud signals are never shown to claimants
+- App layout: bottom tab bar on phones, fixed sidebar on tablets and computers
 
-![Claimant app: live capture](docs/screenshots/capture.png)
+![Claimant app on iPhone](docs/screenshots/phone.png)
+<p align="center"><sub>iPhone: guided capture (shot 3 of 3), claim form, and My claims with an offer from the insurer.</sub></p>
+
+![Claimant app on iPad](docs/screenshots/ipad.png)
 
 **Insurer portal**
 - Triaged queue (verified, standard review, flagged) with a reason for every finding
-- Evidence checks: capture record, integrity (SHA-512), live capture, claimant = capturing device, reuse across insurers, claimant history, photo vs description, amount vs estimated repair cost, AI-generation labels (C2PA / IPTC / generator metadata)
+- AI damage assessment: each damaged part with damage type and severity (minor / moderate / severe), plus a repair range
+- Evidence checks: capture record, integrity (SHA-512), live capture, claimant = capturing device, three-shot set (same device, distinct shots, one session), same object in every shot, real scene vs screen or print, reuse across insurers (every shot), claimant history, photo vs description, amount vs estimated repair cost, AI-generation labels (C2PA / IPTC / generator metadata)
 - Upload tier for photos taken elsewhere: metadata signals and reverse image search via Google Cloud Vision, paid per request through the Pay.sh catalog
-- One-click approve-and-pay or reject, both recorded on Solana
+- Pay the full amount, send a lower offer with a note, or reject; every decision is signed with the adjuster's wallet and recorded on Solana
 
 **Engineering details**
 - 64-bit perceptual hash (dHash) survives messaging-app compression and resizing; SHA-512 proves byte-level integrity
 - Claude assessment returns schema-validated structured output; claimant text is treated strictly as data (tested against prompt injection)
-- End-to-end test covering capture, claim, approval, double claim, rejection and compressed-copy verification ([`scripts/e2e.js`](scripts/e2e.js))
+- Wallet decisions are server-issued, human-readable messages bound to claim, action, amount and payee; changed amounts, other wallets' signatures and replays are refused
+- End-to-end test covering capture, claim, wallet-signed approval, double claim, rejection and compressed-copy verification ([`scripts/e2e.js`](scripts/e2e.js))
 
 ## Tech stack
 
@@ -113,7 +144,8 @@ flowchart LR
 | Payments | Pay.sh gateway and CLI (HTTP 402, USDC) |
 | AI | Claude (Anthropic SDK, vision + structured outputs) |
 | Server | Node.js 24, Express 5, sharp, tweetnacl, exif-reader |
-| Frontend | Vanilla HTML/CSS/JS, browser camera API (getUserMedia), no build step |
+| Wallets | Phantom and Solflare (injected providers, message signing; deep links into the wallet apps on iOS) |
+| Frontend | Vanilla HTML/CSS/JS, browser camera API (getUserMedia), installable web app (manifest), no build step |
 
 ## Getting started
 
@@ -125,6 +157,7 @@ npm run cert                 # self-signed HTTPS cert (phone cameras require HTT
 npm run dev                  # http://localhost:3000 and https://<LAN-IP>:3443
 npm run gateway              # Pay.sh gateway on :1402, with payment debugger
 node scripts/e2e.js          # end-to-end test
+cloudflared tunnel --url http://localhost:3000   # optional: public HTTPS link for phones and judges
 ```
 
 Configuration lives in `.env`:
@@ -133,10 +166,11 @@ Configuration lives in `.env`:
 |---|---|
 | `RPC_URL`, `CLUSTER` | Solana RPC (defaults to devnet) |
 | `ANTHROPIC_API_KEY` | Enables the Claude photo assessment |
+| `CONTENT_CHECK_VIA=claude-code` | Local demos without API credits: runs the assessment through the machine's logged-in Claude Code, with all tools disabled |
 | `PAYOUT_MINT`, `PAYOUT_SYMBOL` | Payout stablecoin, e.g. USDC or EURC (setup creates a test token otherwise) |
 | `REVERSE_SEARCH=on` | Enables Google Vision reverse image search via Pay.sh (mainnet account required) |
 
-Open `/capture.html` for the claimant app and `/adjuster.html` for the insurer portal.
+Open `/capture.html` for the claimant app and `/adjuster.html` for the insurer portal. Install the Phantom or Solflare browser extension to sign decisions as an adjuster.
 
 ## Project structure
 
@@ -144,12 +178,12 @@ Open `/capture.html` for the claimant app and `/adjuster.html` for the insurer p
 src/
   server.js         API: capture, claims, triage, adjuster decisions, claimant/insurer views
   solana.js         memo writes, atomic payout + decision transaction
-  contentCheck.js   Claude photo assessment (match, damage, repair estimate)
+  contentCheck.js   Claude assessment (match, damaged parts + severity, repair estimate, same object, screen/print)
   signals.js        AI-generation labels and metadata signals
   payClient.js      Pay.sh-paid registry checks and reverse image search
   phash.js          perceptual hashing
   store.js          local index (rebuildable from chain)
-public/             claimant app and insurer portal
+public/             claimant app and insurer portal (wallet.js: Phantom / Solflare; link.html: wallet linking)
 scripts/            setup, e2e test, chain reindex, TLS cert, gateway supervisor
 paywall.yml         Pay.sh gateway definition
 ```
@@ -157,10 +191,10 @@ paywall.yml         Pay.sh gateway definition
 ## Roadmap
 
 - **Native capture app** with hardware-backed keys (Secure Enclave / Android Keystore) and Apple App Attest / Google Play Integrity, so only genuine devices can sign evidence
-- **Anti-replay capture**: multi-angle sequences, depth and screen-pattern (moiré) checks against photos of screens
-- **Damage-level AI**: per-part damage classification and severity grading
-- **Mainnet settlement** in EURC for euro claims, and insurer sign-in with role-based access
+- **Stronger anti-replay**: depth data from the phone's camera on top of today's three-shot set and screen/print check
+- **Coverage rules**: each insurer's policy (covered items, damage types, limits, excess) checked automatically against the AI's findings
+- **Mainnet settlement** in EURC for euro claims, paid directly from the insurer's wallet, and an allowlist of adjuster wallets per insurer
 - **C2PA interoperability**: issue Content Credentials alongside the on-chain record
 - **Pay.sh catalog listing** so any claims agent can discover and buy verifications
 
-The current build runs on a Solana test network with fictional insurers and a test stablecoin.
+The current build runs on a Solana test network with fictional insurers and a test stablecoin. Wallets sign decisions; the payment itself is sent by the insurer's treasury account on that network.

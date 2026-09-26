@@ -178,8 +178,8 @@ video.preview { background: #000; max-height: 60vh; }
 .cammsg { margin: 8px 0 0; font-size: 13px; color: var(--muted); min-height: 1.2em; text-align: center; }
 .shutterbar { position: relative; }
 .camclose { position: absolute; right: 0; top: 50%; transform: translateY(-50%); width: 40px; height: 40px; border-radius: 50%; border: 1px solid var(--line); background: var(--bg); color: var(--ink); font-size: 16px; cursor: pointer; }
-/* Phones: the camera takes the whole screen so the shutter is always under the thumb */
-@media (max-width: 720px) {
+/* Phones and tablets: the camera takes the whole screen so the shutter is always under the thumb */
+@media (max-width: 720px), (pointer: coarse) {
   .cam:not([hidden]) {
     position: fixed; inset: 0; z-index: 50; background: #000; display: flex; flex-direction: column;
     padding: env(safe-area-inset-top) 0 env(safe-area-inset-bottom);
@@ -258,6 +258,7 @@ tr.click:hover td { background: var(--subtle); }
   .tabbar a { display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 4px 0; font-size: 11px; font-weight: 500; color: var(--muted); text-decoration: none; }
   .tabbar a.active { color: var(--blue); }
   .tabbar svg { width: 25px; height: 25px; }
+  .tabbar .tb-brand, .tabbar .tb-foot { display: none; }
 }
 
 /* Wallet balance card */
@@ -285,3 +286,26 @@ tr.click:hover td { background: var(--subtle); }
 .money span { position: absolute; left: 13px; top: 50%; transform: translateY(-50%); color: var(--muted); font-weight: 500; pointer-events: none; }
 .money input { padding-left: 30px; }
 textarea { resize: vertical; font: inherit; }
+
+/* ---------- Claimant app on tablets and computers: fixed sidebar ---------- */
+@media (min-width: 721px) {
+  body[data-role=claimant] { background: var(--subtle); padding-left: calc(236px + env(safe-area-inset-left)); }
+  body[data-role=claimant] .topbar { display: none; }
+  body[data-role=claimant] .eyebrow { display: none; }
+  body[data-role=claimant] main { padding-top: calc(36px + env(safe-area-inset-top)); }
+  body[data-role=claimant] .card { border-radius: 16px; border-color: #e9ebef; box-shadow: 0 1px 2px rgba(16, 24, 40, .04); }
+  body[data-role=claimant] .card.subtle { background: var(--bg); }
+  body[data-role=claimant] .btn { border-radius: 10px; }
+  .tabbar {
+    display: flex; flex-direction: column; gap: 4px; position: fixed; top: 0; bottom: 0; left: 0; z-index: 40;
+    width: calc(236px + env(safe-area-inset-left)); background: var(--ink);
+    padding: calc(22px + env(safe-area-inset-top)) 14px calc(18px + env(safe-area-inset-bottom)) calc(14px + env(safe-area-inset-left));
+  }
+  .tabbar .tb-brand { display: flex; align-items: center; gap: 10px; padding: 2px 10px 26px; color: #fff; font-weight: 800; font-size: 15px; letter-spacing: .08em; text-decoration: none; }
+  .tabbar .tb-brand .mark { width: 28px; height: 28px; }
+  .tabbar a:not(.tb-brand) { display: flex; align-items: center; gap: 12px; padding: 11px 12px; border-radius: 10px; color: rgba(255, 255, 255, .72); font-size: 15px; font-weight: 500; text-decoration: none; }
+  .tabbar a:not(.tb-brand):hover { background: rgba(255, 255, 255, .07); color: #fff; }
+  .tabbar a.active, .tabbar a.active:hover { background: var(--blue); color: #fff; }
+  .tabbar svg { width: 22px; height: 22px; flex: none; }
+  .tabbar .tb-foot { margin-top: auto; padding: 0 12px; font-size: 12px; color: rgba(255, 255, 255, .45); }
+}
