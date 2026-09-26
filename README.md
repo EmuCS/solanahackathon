@@ -29,6 +29,29 @@
 | **Code** | https://github.com/EmuCS/solanahackathon |
 | **On-chain proof** | Real transactions from today's build, listed [below](#on-chain-proof) |
 
+### Try it (for judges)
+
+- **Claimant app** (open on a phone): https://faces-pioneer-fate-day.trycloudflare.com/capture.html
+- **Insurer portal** (open on a laptop): https://faces-pioneer-fate-day.trycloudflare.com/adjuster.html
+
+**As the claimant, on your phone**
+1. Open the claimant link. Optional: Share → **Add to Home Screen** to use it as an app.
+2. **Capture** → **Start guided capture** → allow the camera → take the three shots it asks for: wide, close-up, then from the side it names.
+3. Tap **Submit a claim with these photos**, describe the damage, enter an amount, pick an insurer and **Submit claim**.
+4. Optional: **Profile** → **Connect Phantom** (or Solflare) so payments go to your own wallet. On iPhone, tap **Open in Phantom** and approve there.
+
+**As the adjuster, on your laptop**
+
+5. Open the insurer link. Your claim appears in the **Claims queue** about 20 seconds after submitting, once the AI check finishes. Open it.
+6. Review the damaged parts with severity, the evidence checks and the Solana records for each shot.
+7. Click **Connect Phantom** (or Solflare), which needs the browser extension. Then either keep the full amount and click **Approve and pay**, or lower it to **Send offer**, or click **Reject**. Approve the message in your wallet.
+
+**Back on the phone**
+
+8. **My claims** shows the decision. For an offer, tap **Accept**: the payment settles in seconds and the balance updates, with a link to the payment on Solana.
+
+Things to try: submit the same photos again, or to the other insurer (flagged as reuse); photograph a screen showing a photo (flagged as screen or print); claim €2,000 for a small scratch (flagged as likely inflated).
+
 ![FraudBusters overview](docs/screenshots/overview.png)
 
 ## The problem
